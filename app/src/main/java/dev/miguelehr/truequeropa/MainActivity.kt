@@ -7,6 +7,7 @@ import androidx.activity.enableEdgeToEdge
 import dev.miguelehr.truequeropa.nav.AppNav
 import dev.miguelehr.truequeropa.ui.theme.TruequeRopaTheme
 
+
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
