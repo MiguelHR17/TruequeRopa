@@ -1,3 +1,4 @@
+
 package dev.miguelehr.truequeropa.auth
 
 import com.google.firebase.auth.FirebaseAuth
