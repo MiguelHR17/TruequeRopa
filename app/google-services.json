@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "242896635063",
+    "project_id": "truequeropa",
+    "storage_bucket": "truequeropa.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:242896635063:android:6e083fcdc5bd8ee334b932",
+        "android_client_info": {
+          "package_name": "dev.miguelehr.truequeropa"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB5-oXfw26vOSvdNPgJCMKazuJA-l7KhJ8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

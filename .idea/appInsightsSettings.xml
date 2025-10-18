@@ -8,10 +8,10 @@
             <InsightsFilterSettings>
               <option name="connection">
                 <ConnectionSetting>
-                  <option name="appId" value="PLACEHOLDER" />
-                  <option name="mobileSdkAppId" value="" />
-                  <option name="projectId" value="" />
-                  <option name="projectNumber" value="" />
+                  <option name="appId" value="dev.miguelehr.truequeropa" />
+                  <option name="mobileSdkAppId" value="1:242896635063:android:6e083fcdc5bd8ee334b932" />
+                  <option name="projectId" value="truequeropa" />
+                  <option name="projectNumber" value="242896635063" />
                 </ConnectionSetting>
               </option>
               <option name="signal" value="SIGNAL_UNSPECIFIED" />
