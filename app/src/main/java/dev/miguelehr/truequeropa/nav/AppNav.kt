@@ -25,6 +25,15 @@ import dev.miguelehr.truequeropa.ui.screens.ProductFormScreen
 import dev.miguelehr.truequeropa.ui.screens.ProposalsInboxScreen
 import dev.miguelehr.truequeropa.ui.screens.ProposeTradeScreen
 import dev.miguelehr.truequeropa.ui.screens.TradeHistoryScreen
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.foundation.layout.Box
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.unit.dp
+import androidx.navigation.NavGraph.Companion.findStartDestination
 
 sealed class Route(val path: String) {
     data object Login: Route("auth/login")
@@ -35,6 +44,7 @@ sealed class Route(val path: String) {
     data object History: Route("home/history")
     data object ProposeTrade: Route("trade/propose/{productId}") { fun with(id:String) = "trade/propose/$id" }
     data object AdminPanel: Route("admin/panel")
+    data object Account: Route("home/account")
 }
 
 data class BottomItem(val route:String, val label:String, val icon: androidx.compose.ui.graphics.vector.ImageVector)
@@ -46,28 +56,61 @@ fun AppNav(navController: NavHostController = rememberNavController()) {
         BottomItem(Route.NewProduct.path, "Publicar", Icons.Default.Add),
         BottomItem(Route.Proposals.path, "Propuestas", Icons.Default.Inbox),
         BottomItem(Route.History.path, "Historial", Icons.Default.History),
+        BottomItem(Route.Account.path, "Cuenta", Icons.Default.Person),
     )
 
     val backstack by navController.currentBackStackEntryAsState()
     val current = backstack?.destination?.route
+    var showAccountMenu by remember { mutableStateOf(false) }
 
     Scaffold(
         bottomBar = {
-            // Oculta la barra en pantallas de auth
             if (current?.startsWith("auth/") != true) {
-                NavigationBar {
-                    val sel = current ?: Route.Offers.path
-                    bottomItems.forEach {
-                        NavigationBarItem(
-                            selected = sel == it.route,
+                Box { // 👈 para anclar el menú
+                    NavigationBar {
+                        val sel = current ?: Route.Offers.path
+                        bottomItems.forEach { item ->
+                            val isAccount = (item.route == Route.Account.path)
+                            NavigationBarItem(
+                                selected = sel == item.route,
+                                onClick = {
+                                    if (isAccount) {
+                                        showAccountMenu = true
+                                    } else {
+                                        navController.navigate(item.route) {
+                                            launchSingleTop = true
+                                            popUpTo(Route.Offers.path) { inclusive = false }
+                                        }
+                                    }
+                                },
+                                icon = { Icon(item.icon, contentDescription = item.label) },
+                                label = { Text(item.label) }
+                            )
+                        }
+                    }
+
+                    // 🔽 Menú pequeño que aparece al tocar el icono "Cuenta"
+                    DropdownMenu(
+                        expanded = showAccountMenu,
+                        onDismissRequest = { showAccountMenu = false },
+                        // (opcional) desplazar un poco hacia arriba para que no tape la barra
+                        offset = androidx.compose.ui.unit.DpOffset(0.dp, (-8).dp)
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("Cerrar sesión") },
                             onClick = {
-                                navController.navigate(it.route) {
+                                showAccountMenu = false
+                                // 1) salir de Firebase
+                                dev.miguelehr.truequeropa.auth.FirebaseAuthManager.signOut()
+                                // 2) navegar a Login limpiando el backstack
+                                navController.navigate(Route.Login.path) {
+                                    // limpia todo hasta el startDestination (Login en tu grafo)
+                                    popUpTo(navController.graph.findStartDestination().id) {
+                                        inclusive = true // elimina lo anterior
+                                    }
                                     launchSingleTop = true
-                                    popUpTo(Route.Offers.path) { inclusive = false }
                                 }
-                            },
-                            icon = { Icon(it.icon, contentDescription = it.label) },
-                            label = { Text(it.label) }
+                            }
                         )
                     }
                 }
@@ -77,14 +120,26 @@ fun AppNav(navController: NavHostController = rememberNavController()) {
         NavHost(navController = navController, startDestination = Route.Login.path) {
             composable(Route.Login.path) {
                 AuthLoginScreen(
-                    onLogin = { navController.navigate(Route.Offers.path) },
+                    onLogin = {
+                        navController.navigate(Route.Offers.path) {
+                            // elimina Login del backstack para que no se pueda volver con "Atrás"
+                            popUpTo(Route.Login.path) { inclusive = true }
+                            launchSingleTop = true
+                        }
+                    },
                     onGoRegister = { navController.navigate(Route.Register.path) },
                     padding = padding
                 )
             }
             composable(Route.Register.path) {
                 AuthRegisterScreen(
-                    onRegistered = { navController.navigate(Route.Offers.path) },
+                    onRegistered = {
+                        dev.miguelehr.truequeropa.auth.FirebaseAuthManager.signOut()
+                        navController.navigate(Route.Login.path) {
+                            popUpTo(Route.Login.path) { inclusive = true }
+                            launchSingleTop = true
+                        }
+                    },
                     padding = padding
                 )
             }

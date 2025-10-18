@@ -31,4 +31,5 @@ object FirebaseAuthManager {
     fun signOut() = auth.signOut()
     fun isLoggedIn(): Boolean = auth.currentUser != null
     fun currentUserEmail(): String? = auth.currentUser?.email
+    fun currentUserId(): String? = auth.currentUser?.uid
 }

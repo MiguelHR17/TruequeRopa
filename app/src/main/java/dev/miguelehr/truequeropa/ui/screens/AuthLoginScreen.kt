@@ -17,6 +17,8 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
+import dev.miguelehr.truequeropa.auth.FirebaseAuthManager
+import dev.miguelehr.truequeropa.auth.FirebaseAuthManager.Result
 
 @Composable
 fun AuthLoginScreen(
@@ -30,6 +32,7 @@ fun AuthLoginScreen(
     var pass by rememberSaveable { mutableStateOf("") }
     var passVisible by rememberSaveable { mutableStateOf(false) }
     var loading by rememberSaveable { mutableStateOf(false) }
+    var errorMsg by rememberSaveable { mutableStateOf<String?>(null) }
 
     // Validaciones simples
     val emailOk = email.isNotBlank() && EMAIL_REGEX.matches(email)
@@ -96,24 +99,37 @@ fun AuthLoginScreen(
             keyboardActions = KeyboardActions(
                 onDone = {
                     focus.clearFocus()
-                    if (formOk) simulateLogin(onSuccess = onLogin, setLoading = { loading = it })
+                    if (formOk) {
+                        doLogin(
+                            email = email,
+                            pass = pass,
+                            setLoading = { loading = it },
+                            setError = { errorMsg = it },
+                            onSuccess = onLogin
+                        )
+                    }
                 }
             ),
             modifier = Modifier.fillMaxWidth()
         )
 
-        Spacer(Modifier.height(8.dp))
-        TextButton(
-            onClick = { /* TODO: flujo de recuperar contraseña */ },
-            content = { Text("¿Olvidaste tu contraseña?") }
-        )
+        if (errorMsg != null) {
+            Spacer(Modifier.height(8.dp))
+            Text(errorMsg!!, color = MaterialTheme.colorScheme.error)
+        }
 
         Spacer(Modifier.height(16.dp))
 
         // Botón Entrar
         Button(
             onClick = {
-                simulateLogin(onSuccess = onLogin, setLoading = { loading = it })
+                doLogin(
+                    email = email,
+                    pass = pass,
+                    setLoading = { loading = it },
+                    setError = { errorMsg = it },
+                    onSuccess = onLogin
+                )
             },
             enabled = formOk,
             modifier = Modifier.fillMaxWidth(),
@@ -143,31 +159,30 @@ fun AuthLoginScreen(
         }
 
         Spacer(Modifier.height(24.dp))
-
-        // Nota informativa (opcional)
         ProvideTextStyle(MaterialTheme.typography.bodySmall) {
-            Text("Al continuar aceptas las políticas de uso y privacidad (mock).")
+            Text("Al continuar aceptas las políticas de uso y privacidad.")
         }
     }
 }
 
-// Regex simple para validar email (evita dependencias extras)
-private val EMAIL_REGEX =
-    Regex("^[A-Za-z0-9+_.-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$")
+// Regex simple para validar email
+private val EMAIL_REGEX = Regex("^[A-Za-z0-9+_.-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$")
 
-/**
- * Simula un login rápido (UI-only).
- * Cambia 'delayMs' si quieres ver el spinner más tiempo.
- */
-private fun simulateLogin(
-    delayMs: Long = 600,
-    onSuccess: () -> Unit,
-    setLoading: (Boolean) -> Unit
+// ---- Lógica que llama al manager ----
+private fun doLogin(
+    email: String,
+    pass: String,
+    setLoading: (Boolean) -> Unit,
+    setError: (String?) -> Unit,
+    onSuccess: () -> Unit
 ) {
+    setError(null)
     setLoading(true)
-    // Sin coroutines para no añadir dependencias; usamos postFrame simple
-    android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+    FirebaseAuthManager.loginWithEmail(email, pass) { res ->
         setLoading(false)
-        onSuccess()
-    }, delayMs)
+        when (res) {
+            is Result.Success -> onSuccess()
+            is Result.Error   -> setError(res.message ?: "Error iniciando sesión")
+        }
+    }
 }
