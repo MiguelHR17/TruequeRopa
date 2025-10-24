@@ -1,5 +1,8 @@
 package dev.miguelehr.truequeropa.ui.screens
 
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -22,12 +25,15 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -55,7 +61,18 @@ fun ProductFormScreen(onSaved: () -> Unit, padding: PaddingValues) {
     var selectedCategory by remember { mutableStateOf<Category?>(null) }
     var selectedSize by remember { mutableStateOf<Size?>(null) }
     var selectedCondition by remember { mutableStateOf(Condition.USADO) }
-    var selectedImages by remember { mutableStateOf(listOf<String>()) }
+    var selectedImages by remember { mutableStateOf(listOf<Uri>()) }
+
+    // Launcher para seleccionar imágenes
+    val imagePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        uri?.let {
+            if (selectedImages.size < 5) { // Límite de 5 fotos
+                selectedImages = selectedImages + it
+            }
+        }
+    }
 
     Column(
         modifier = Modifier
@@ -173,6 +190,13 @@ fun ProductFormScreen(onSaved: () -> Unit, padding: PaddingValues) {
             text = "Fotos del producto",
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.padding(bottom = 8.dp)
+        )
+
+        Text(
+            text = "Máximo 5 fotos",
+            style = MaterialTheme.typography.bodySmall,
+            color = Color.Gray,
             modifier = Modifier.padding(bottom = 12.dp)
         )
 
@@ -181,37 +205,74 @@ fun ProductFormScreen(onSaved: () -> Unit, padding: PaddingValues) {
             modifier = Modifier.padding(bottom = 32.dp)
         ) {
             // Botón para agregar fotos
-            item {
-                Box(
-                    modifier = Modifier
-                        .size(140.dp)
-                        .clip(RoundedCornerShape(12.dp))
-                        .border(2.dp, Color.Gray.copy(alpha = 0.3f), RoundedCornerShape(12.dp))
-                        .clickable {
-                            // Simular agregar imagen de placeholder
-                            selectedImages = selectedImages + "https://via.placeholder.com/300"
-                        },
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        Icons.Default.Add,
-                        contentDescription = "Agregar foto",
-                        modifier = Modifier.size(40.dp),
-                        tint = Color.Gray
-                    )
+            if (selectedImages.size < 5) {
+                item {
+                    Box(
+                        modifier = Modifier
+                            .size(140.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .border(2.dp, Color.Gray.copy(alpha = 0.3f), RoundedCornerShape(12.dp))
+                            .clickable {
+                                imagePickerLauncher.launch("image/*")
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Icon(
+                                Icons.Default.Add,
+                                contentDescription = "Agregar foto",
+                                modifier = Modifier.size(40.dp),
+                                tint = Color.Gray
+                            )
+                            Text(
+                                text = "Agregar foto",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color.Gray
+                            )
+                        }
+                    }
                 }
             }
 
             // Imágenes seleccionadas
-            items(selectedImages) { imageUrl ->
-                Image(
-                    painter = rememberAsyncImagePainter(imageUrl),
-                    contentDescription = "Foto del producto",
-                    modifier = Modifier
-                        .size(140.dp)
-                        .clip(RoundedCornerShape(12.dp)),
-                    contentScale = ContentScale.Crop
-                )
+            items(selectedImages) { imageUri ->
+                Box(
+                    modifier = Modifier.size(140.dp)
+                ) {
+                    Image(
+                        painter = rememberAsyncImagePainter(imageUri),
+                        contentDescription = "Foto del producto",
+                        modifier = Modifier
+                            .size(140.dp)
+                            .clip(RoundedCornerShape(12.dp)),
+                        contentScale = ContentScale.Crop
+                    )
+
+                    // Botón para eliminar foto
+                    IconButton(
+                        onClick = {
+                            selectedImages = selectedImages.filter { it != imageUri }
+                        },
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(4.dp)
+                            .size(32.dp)
+                    ) {
+                        Surface(
+                            shape = CircleShape,
+                            color = Color.Black.copy(alpha = 0.6f)
+                        ) {
+                            Icon(
+                                Icons.Default.Close,
+                                contentDescription = "Eliminar foto",
+                                tint = Color.White,
+                                modifier = Modifier.padding(4.dp)
+                            )
+                        }
+                    }
+                }
             }
         }
 
@@ -229,7 +290,7 @@ fun ProductFormScreen(onSaved: () -> Unit, padding: PaddingValues) {
                         talla = selectedSize!!,
                         estado = selectedCondition,
                         categoria = selectedCategory!!,
-                        imageUrl = selectedImages.firstOrNull() ?: "https://via.placeholder.com/300"
+                        imageUrl = selectedImages.firstOrNull()?.toString() ?: "https://via.placeholder.com/300"
                     )
 
                     // TODO: Guardar en Firestore
