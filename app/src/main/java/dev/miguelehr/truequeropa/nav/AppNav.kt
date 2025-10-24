@@ -35,6 +35,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavGraph.Companion.findStartDestination
+import dev.miguelehr.truequeropa.ui.screens.NotificationScreen
 
 sealed class Route(val path: String) {
     data object Login: Route("auth/login")
@@ -42,6 +43,7 @@ sealed class Route(val path: String) {
     data object Offers: Route("home/offers")
     data object NewProduct: Route("home/new")
     data object Proposals: Route("home/proposals")
+    data object Notification: Route("home/notification")
     data object History: Route("home/history")
     data object ProposeTrade: Route("trade/propose/{productId}") { fun with(id:String) = "trade/propose/$id" }
     data object AdminPanel: Route("admin/panel")
@@ -56,6 +58,7 @@ fun AppNav(navController: NavHostController = rememberNavController()) {
         BottomItem(Route.Offers.path, "Ofertas", Icons.Default.Store),
         BottomItem(Route.NewProduct.path, "Publicar", Icons.Default.Add),
         BottomItem(Route.Proposals.path, "Propuestas", Icons.Default.Inbox),
+        BottomItem(Route.Notification.path, "Notificaciones", Icons.Default.Inbox),
         BottomItem(Route.History.path, "Historial", Icons.Default.History),
         BottomItem(Route.Account.path, "Cuenta", Icons.Default.Person),
     )
@@ -156,7 +159,8 @@ fun AppNav(navController: NavHostController = rememberNavController()) {
                     padding = padding
                 )
             }
-            composable(Route.Proposals.path) { ProposalsInboxScreen(padding) }
+            composable(Route.Proposals.path) { ProposalsInboxScreen(onSent = { navController.navigate(Route.ProposeTrade.path) },padding) }
+            composable(Route.Notification.path) { NotificationScreen(onSent = { navController.navigate(Route.ProposeTrade.path) },padding) }
             composable(Route.History.path) { TradeHistoryScreen(padding) }
             composable(Route.ProposeTrade.path) { entry ->
                 val id = entry.arguments?.getString("productId") ?: ""
