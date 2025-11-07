@@ -1,56 +1,69 @@
 package dev.miguelehr.truequeropa.ui.screens
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
-import coil.compose.AsyncImage
 import coil.compose.rememberAsyncImagePainter
+import dev.miguelehr.truequeropa.R
 import dev.miguelehr.truequeropa.model.*
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun OffersScreen(
-    padding: PaddingValues,
     onOpenProduct: (productId: String, ownerUserId: String) -> Unit,
-    onOpenProfile: (userId: String) -> Unit
+    onOpenUserSearch: () -> Unit = {}, // ya no lo usamos; lo dejamos por compatibilidad
+    padding: PaddingValues
 ) {
-    // --- estado de búsqueda de personas
-    var personQuery by remember { mutableStateOf("") }
+    // --- estado de búsqueda & filtros ---
+    var query by remember { mutableStateOf("") }
+    var catExpanded by remember { mutableStateOf(false) }
+    var sizeExpanded by remember { mutableStateOf(false) }
+    var colorExpanded by remember { mutableStateOf(false) } // visual; el modelo no tiene color
+    var catFilter: Category? by remember { mutableStateOf(null) }
+    var sizeFilter: Size? by remember { mutableStateOf(null) }
+    var colorFilter: String? by remember { mutableStateOf(null) }
 
-    // --- filtros de categoría para ofertas
-    var selectedCategory: Category? by remember { mutableStateOf(null) }
-
-    val allUsers = remember { FakeRepository.users }
     val allProducts = remember { FakeRepository.products }
+    val allUsers = remember { FakeRepository.users }
 
-    // Sugerencias de personas (muestra máx. 5)
-    val userResults = remember(personQuery, allUsers) {
-        val q = personQuery.trim()
-        if (q.length < 2) emptyList()
-        else allUsers.filter { u ->
-            u.nombre.contains(q, ignoreCase = true) ||
-                    u.correo.contains(q, ignoreCase = true)
-        }.take(5)
-    }
+    // --- búsqueda en vivo: productos + personas ---
+    val results = remember(query, catFilter, sizeFilter, colorFilter, allProducts) {
+        val q = query.trim()
+        val usersMatchedIds: Set<String> =
+            if (q.isBlank()) emptySet() else allUsers
+                .filter {
+                    it.nombre.contains(q, ignoreCase = true) ||
+                            it.correo.contains(q, ignoreCase = true)
+                }
+                .map { it.id }
+                .toSet()
 
-    // Ofertas filtradas por categoría
-    val offers = remember(selectedCategory, allProducts) {
-        if (selectedCategory == null) allProducts
-        else allProducts.filter { it.categoria == selectedCategory }
+        allProducts
+            .asSequence()
+            // match por texto del producto
+            .filter { p ->
+                if (q.isBlank()) true
+                else p.titulo.contains(q, ignoreCase = true) ||
+                        p.descripcion.contains(q, ignoreCase = true) ||
+                        p.ownerId in usersMatchedIds   // match por persona
+            }
+            // filtros
+            .filter { p -> catFilter?.let { p.categoria == it } ?: true }
+            .filter { p -> sizeFilter?.let { p.talla == it } ?: true }
+            // colorFilter solo visual: si quisieras, podrías mapear a una etiqueta en la descripción
+            .toList()
     }
 
     Column(
@@ -59,115 +72,130 @@ fun OffersScreen(
             .fillMaxSize()
             .padding(horizontal = 16.dp, vertical = 12.dp)
     ) {
-        // Título
-        Text(
-            "Explorar",
-            style = MaterialTheme.typography.headlineSmall,
-            fontWeight = FontWeight.SemiBold
-        )
-        Spacer(Modifier.height(12.dp))
+        Text("Ofertas recientes", style = MaterialTheme.typography.headlineMedium)
+        Spacer(Modifier.height(16.dp))
 
-        // --- Búsqueda de personas (en la misma pantalla)
+        // --- buscador único: productos o personas ---
         OutlinedTextField(
-            value = personQuery,
-            onValueChange = { personQuery = it },
+            value = query,
+            onValueChange = { query = it },
+            placeholder = { Text("Buscar productos o personas…") },
+            leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
             singleLine = true,
-            leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
-            placeholder = { Text("Buscar personas por nombre o correo…") },
+            keyboardOptions = KeyboardOptions(
+                keyboardType = KeyboardType.Text,
+                imeAction = ImeAction.Search
+            ),
             modifier = Modifier.fillMaxWidth()
         )
 
-        // Sugerencias (si hay query)
-        if (userResults.isNotEmpty()) {
-            Spacer(Modifier.height(8.dp))
-            Surface(
-                tonalElevation = 1.dp,
-                shape = MaterialTheme.shapes.medium,
-                modifier = Modifier.fillMaxWidth()
+        Spacer(Modifier.height(12.dp))
+
+        // --- filtros (categoría / talla / color visual) ---
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            // Categoría
+            ExposedDropdownMenuBox(
+                expanded = catExpanded,
+                onExpandedChange = { catExpanded = !catExpanded },
+                modifier = Modifier.weight(1f)
             ) {
-                Column(Modifier.padding(vertical = 6.dp)) {
-                    userResults.forEach { u ->
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { onOpenProfile(u.id) }
-                                .padding(horizontal = 12.dp, vertical = 10.dp)
-                        ) {
-                            if (!u.photoUrl.isNullOrBlank()) {
-                                AsyncImage(
-                                    model = u.photoUrl,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(36.dp).clip(CircleShape)
-                                )
-                            } else {
-                                Box(
-                                    modifier = Modifier
-                                        .size(36.dp)
-                                        .clip(CircleShape)
-                                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Text(u.nombre.take(1).uppercase())
-                                }
-                            }
-                            Spacer(Modifier.width(10.dp))
-                            Column(Modifier.weight(1f)) {
-                                Text(u.nombre, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                Text(
-                                    u.correo,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                            }
-                        }
+                OutlinedTextField(
+                    value = catFilter?.name ?: "Categoría",
+                    onValueChange = {},
+                    readOnly = true,
+                    modifier = Modifier
+                        .menuAnchor()
+                        .fillMaxWidth()
+                )
+                ExposedDropdownMenu(
+                    expanded = catExpanded,
+                    onDismissRequest = { catExpanded = false }
+                ) {
+                    DropdownMenuItem(text = { Text("Todas") }, onClick = {
+                        catFilter = null; catExpanded = false
+                    })
+                    Category.entries.forEach { c ->
+                        DropdownMenuItem(text = { Text(c.name) }, onClick = {
+                            catFilter = c; catExpanded = false
+                        })
+                    }
+                }
+            }
+
+            // Talla
+            ExposedDropdownMenuBox(
+                expanded = sizeExpanded,
+                onExpandedChange = { sizeExpanded = !sizeExpanded },
+                modifier = Modifier.weight(1f)
+            ) {
+                OutlinedTextField(
+                    value = sizeFilter?.name ?: "Talla",
+                    onValueChange = {},
+                    readOnly = true,
+                    modifier = Modifier
+                        .menuAnchor()
+                        .fillMaxWidth()
+                )
+                ExposedDropdownMenu(
+                    expanded = sizeExpanded,
+                    onDismissRequest = { sizeExpanded = false }
+                ) {
+                    DropdownMenuItem(text = { Text("Todas") }, onClick = {
+                        sizeFilter = null; sizeExpanded = false
+                    })
+                    Size.entries.forEach { s ->
+                        DropdownMenuItem(text = { Text(s.name) }, onClick = {
+                            sizeFilter = s; sizeExpanded = false
+                        })
+                    }
+                }
+            }
+
+            // Color (opcional/visual)
+            ExposedDropdownMenuBox(
+                expanded = colorExpanded,
+                onExpandedChange = { colorExpanded = !colorExpanded },
+                modifier = Modifier.weight(1f)
+            ) {
+                OutlinedTextField(
+                    value = colorFilter ?: "Color",
+                    onValueChange = {},
+                    readOnly = true,
+                    modifier = Modifier
+                        .menuAnchor()
+                        .fillMaxWidth()
+                )
+                ExposedDropdownMenu(
+                    expanded = colorExpanded,
+                    onDismissRequest = { colorExpanded = false }
+                ) {
+                    listOf("Todos", "Rojo", "Azul", "Negro", "Blanco").forEach { c ->
+                        DropdownMenuItem(text = { Text(c) }, onClick = {
+                            colorFilter = if (c == "Todos") null else c
+                            colorExpanded = false
+                        })
                     }
                 }
             }
         }
 
-        Spacer(Modifier.height(16.dp))
+        // limpiar filtros
+        TextButton(
+            onClick = { catFilter = null; sizeFilter = null; colorFilter = null },
+            modifier = Modifier.padding(top = 8.dp)
+        ) { Text("Limpiar filtros") }
 
-        // --- Filtros de categorías
-        Text("Categorías", style = MaterialTheme.typography.titleMedium)
-        Spacer(Modifier.height(8.dp))
-        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            item {
-                FilterChip(
-                    selected = selectedCategory == null,
-                    onClick = { selectedCategory = null },
-                    label = { Text("Todas") }
-                )
-            }
-            items(Category.entries.size) { idx ->
-                val cat = Category.entries[idx]
-                FilterChip(
-                    selected = selectedCategory == cat,
-                    onClick = { selectedCategory = cat },
-                    label = { Text(cat.name) }
-                )
-            }
-        }
-
-        Spacer(Modifier.height(12.dp))
-
-        // --- Ofertas disponibles (debajo del buscador, como pediste)
-        Text("Ofertas disponibles", style = MaterialTheme.typography.titleMedium)
         Spacer(Modifier.height(8.dp))
 
-        if (offers.isEmpty()) {
+        // --- resultados ---
+        if (results.isEmpty()) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text("No hay ofertas para esta categoría")
+                Text("No hay resultados")
             }
         } else {
-            LazyColumn(
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-                modifier = Modifier.fillMaxSize()
-            ) {
-                items(offers, key = { it.id }) { p ->
-                    OfferCard(
+            LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                items(results, key = { it.id }) { p ->
+                    OfferRowCard(
                         product = p,
                         onClick = { onOpenProduct(p.id, p.ownerId) }
                     )
@@ -179,7 +207,7 @@ fun OffersScreen(
 }
 
 @Composable
-private fun OfferCard(
+private fun OfferRowCard(
     product: Product,
     onClick: () -> Unit
 ) {
@@ -188,40 +216,26 @@ private fun OfferCard(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
         modifier = Modifier.fillMaxWidth()
     ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(12.dp)
-        ) {
-            if (product.imageUrl.isNotBlank()) {
-                AsyncImage(
-                    model = product.imageUrl,
-                    contentDescription = product.titulo,
-                    modifier = Modifier
-                        .size(72.dp)
-                        .clip(RoundedCornerShape(10.dp))
-                )
-            } else {
-                Surface(
-                    tonalElevation = 1.dp,
-                    modifier = Modifier.size(72.dp).clip(RoundedCornerShape(10.dp))
-                ) {}
-            }
-
+        Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Image(
+                painter = rememberAsyncImagePainter(product.imageUrl),
+                contentDescription = product.titulo,
+                modifier = Modifier.size(72.dp)
+            )
             Spacer(Modifier.width(12.dp))
-
             Column(Modifier.weight(1f)) {
-                Text(product.titulo, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(product.titulo, style = MaterialTheme.typography.titleMedium)
                 Text(
-                    "${product.categoria} • Talla ${product.talla}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    "${product.categoria.name} • Talla ${product.talla.name}",
+                    style = MaterialTheme.typography.bodySmall
                 )
                 Text(
                     product.descripcion,
                     style = MaterialTheme.typography.bodySmall,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+                Spacer(Modifier.height(4.dp))
+                AssistChip(onClick = {}, label = { Text(product.estado.name) })
             }
         }
     }

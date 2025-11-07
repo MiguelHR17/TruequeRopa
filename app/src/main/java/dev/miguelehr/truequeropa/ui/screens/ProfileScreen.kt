@@ -1,6 +1,7 @@
 package dev.miguelehr.truequeropa.ui.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -28,7 +29,7 @@ import dev.miguelehr.truequeropa.model.Product
  * @param userId        Si es null => perfil del usuario autenticado
  * @param pinProductId  Si no es null, fija esa publicación arriba (si pertenece al perfil)
  * @param onPublish     Navega a la pantalla de "Publicar"
- * @param onOpenProduct Acción al abrir una publicación (productId)
+ * @param onOpenProduct Acción al abrir una publicación (productId) — se usa en perfil propio
  * @param padding       Padding del Scaffold
  */
 @Composable
@@ -40,17 +41,24 @@ fun ProfileScreen(
     padding: PaddingValues
 ) {
     val me = remember { FakeRepository.currentUser }
+    val myId = me.id
+
+    // Estados para flujo de propuesta (solo en perfil ajeno)
+    var proposeTarget by remember { mutableStateOf<Product?>(null) }
+    var showProposeSheet by remember { mutableStateOf(false) }
+
+    // Usuario del perfil
     val targetUser = remember(userId) {
         FakeRepository.users.find { it.id == userId } ?: me
     }
     val isMe = targetUser.id == me.id
 
-    // Fuente base: todas las publicaciones del propietario del perfil
+    // Publicaciones del propietario
     val allPosts = remember(targetUser.id) {
         FakeRepository.products.filter { it.ownerId == targetUser.id }
     }
 
-    // Publicación fijada (pin) SOLO si pertenece al perfil
+    // Publicación fijada (pin) si pertenece al perfil
     val pinned: Product? = remember(pinProductId, allPosts) {
         if (pinProductId.isNullOrBlank()) null
         else allPosts.find { it.id == pinProductId }
@@ -127,7 +135,7 @@ fun ProfileScreen(
 
         Spacer(Modifier.height(12.dp))
 
-        // CTA Publicar (siempre visible en el perfil propio; en ajeno puedes ocultarlo si prefieres)
+        // CTA Publicar (visible también en perfil ajeno si quieres esconderlo, condiciona con isMe)
         Button(
             onClick = onPublish,
             modifier = Modifier.fillMaxWidth()
@@ -166,7 +174,14 @@ fun ProfileScreen(
                     Spacer(Modifier.height(6.dp))
                     ProfilePostCard(
                         product = pinned,
-                        onOpen = { onOpenProduct(pinned.id) },
+                        onOpen = {
+                            if (isMe) {
+                                onOpenProduct(pinned.id)
+                            } else {
+                                proposeTarget = pinned
+                                showProposeSheet = true
+                            }
+                        },
                         pinned = true
                     )
                     Spacer(Modifier.height(6.dp))
@@ -179,7 +194,14 @@ fun ProfileScreen(
             items(posts, key = { it.id }) { product ->
                 ProfilePostCard(
                     product = product,
-                    onOpen = { onOpenProduct(product.id) }
+                    onOpen = {
+                        if (isMe) {
+                            onOpenProduct(product.id)
+                        } else {
+                            proposeTarget = product
+                            showProposeSheet = true
+                        }
+                    }
                 )
             }
 
@@ -199,6 +221,25 @@ fun ProfileScreen(
                 item { Spacer(Modifier.height(8.dp)) }
             }
         }
+    }
+
+    // === Hoja/diálogo de selección multi-ítem para propuesta ===
+    if (showProposeSheet && proposeTarget != null) {
+        MultiOfferSheet(
+            target = proposeTarget!!,
+            onDismiss = { showProposeSheet = false },
+            onSend = { offeredIds ->
+                if (offeredIds.isNotEmpty()) {
+                    FakeRepository.sendProposal(
+                        fromUserId = myId,
+                        toUserId = proposeTarget!!.ownerId,
+                        offeredProductIds = offeredIds,
+                        requestedProductId = proposeTarget!!.id
+                    )
+                }
+                showProposeSheet = false
+            }
+        )
     }
 }
 
@@ -266,4 +307,78 @@ private fun SmallTag(text: String) {
     ) {
         Text(text, style = MaterialTheme.typography.labelMedium, color = Color.Unspecified)
     }
+}
+
+/* ========== Sheet de selección multi-ítem para proponer trueque ========== */
+
+@Composable
+private fun MultiOfferSheet(
+    target: Product,
+    onDismiss: () -> Unit,
+    onSend: (List<String>) -> Unit
+) {
+    val myProducts = remember {
+        FakeRepository.products.filter { it.ownerId == FakeRepository.currentUser.id }
+    }
+    val selected = remember { mutableStateListOf<String>() }
+    val maxSelect = 5
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {
+            Button(
+                onClick = { onSend(selected.toList()) },
+                enabled = selected.isNotEmpty()
+            ) { Text("Enviar propuesta") }
+        },
+        dismissButton = {
+            OutlinedButton(onClick = onDismiss) { Text("Cancelar") }
+        },
+        title = { Text("Proponer trueque") },
+        text = {
+            Column {
+                Text("Objetivo: ${target.titulo}", style = MaterialTheme.typography.bodyMedium)
+                Spacer(Modifier.height(8.dp))
+                Text("Elige hasta $maxSelect de tus prendas:")
+
+                Spacer(Modifier.height(8.dp))
+
+                myProducts.forEach { p ->
+                    val isChecked = p.id in selected
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 4.dp)
+                            .clickable {
+                                if (isChecked) selected.remove(p.id)
+                                else if (selected.size < maxSelect) selected.add(p.id)
+                            }
+                    ) {
+                        Checkbox(
+                            checked = isChecked,
+                            onCheckedChange = { checked ->
+                                if (checked) {
+                                    if (selected.size < maxSelect) selected.add(p.id)
+                                } else {
+                                    selected.remove(p.id)
+                                }
+                            }
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text("${p.titulo} • ${p.categoria} • ${p.talla}")
+                    }
+                }
+
+                if (selected.size >= maxSelect) {
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        "Has alcanzado el máximo de $maxSelect prendas.",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+            }
+        }
+    )
 }

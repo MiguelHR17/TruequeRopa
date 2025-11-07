@@ -1,4 +1,3 @@
-
 package dev.miguelehr.truequeropa.ui.screens
 
 import androidx.compose.foundation.layout.*
@@ -20,6 +19,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import dev.miguelehr.truequeropa.auth.FirebaseAuthManager
 import dev.miguelehr.truequeropa.auth.FirebaseAuthManager.Result
+import dev.miguelehr.truequeropa.auth.FirebaseMockLinker
 
 @Composable
 fun AuthLoginScreen(
@@ -35,7 +35,6 @@ fun AuthLoginScreen(
     var loading by rememberSaveable { mutableStateOf(false) }
     var errorMsg by rememberSaveable { mutableStateOf<String?>(null) }
 
-    // Validaciones simples
     val emailOk = email.isNotBlank() && EMAIL_REGEX.matches(email)
     val passOk = pass.length >= 6
     val formOk = emailOk && passOk && !loading
@@ -49,141 +48,98 @@ fun AuthLoginScreen(
     ) {
         Text("Iniciar sesión", style = MaterialTheme.typography.headlineSmall)
         Spacer(Modifier.height(12.dp))
-        Text(
-            "Bienvenido a TruequeRopa. Ingresa tus credenciales para continuar.",
-            style = MaterialTheme.typography.bodyMedium
-        )
+        Text("Ingresa tus credenciales para continuar.", style = MaterialTheme.typography.bodyMedium)
         Spacer(Modifier.height(20.dp))
 
-        // Correo
         OutlinedTextField(
             value = email,
             onValueChange = { email = it },
             label = { Text("Correo electrónico") },
             singleLine = true,
             isError = email.isNotEmpty() && !emailOk,
-            supportingText = {
-                if (email.isNotEmpty() && !emailOk) Text("Ingresa un correo válido")
-            },
-            keyboardOptions = KeyboardOptions(
-                keyboardType = KeyboardType.Email,
-                imeAction = ImeAction.Next
-            ),
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email, imeAction = ImeAction.Next),
             modifier = Modifier.fillMaxWidth()
         )
-
         Spacer(Modifier.height(12.dp))
 
-        // Contraseña
         OutlinedTextField(
             value = pass,
             onValueChange = { pass = it },
             label = { Text("Contraseña") },
             singleLine = true,
             isError = pass.isNotEmpty() && !passOk,
-            supportingText = {
-                if (pass.isNotEmpty() && !passOk) Text("Mínimo 6 caracteres")
-            },
             visualTransformation = if (passVisible) VisualTransformation.None else PasswordVisualTransformation(),
             trailingIcon = {
                 IconButton(onClick = { passVisible = !passVisible }) {
                     Icon(
-                        imageVector = if (passVisible) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
-                        contentDescription = if (passVisible) "Ocultar" else "Mostrar"
+                        if (passVisible) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
+                        contentDescription = null
                     )
                 }
             },
-            keyboardOptions = KeyboardOptions(
-                keyboardType = KeyboardType.Password,
-                imeAction = ImeAction.Done
-            ),
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Done),
             keyboardActions = KeyboardActions(
                 onDone = {
                     focus.clearFocus()
-                    if (formOk) {
-                        doLogin(
-                            email = email,
-                            pass = pass,
-                            setLoading = { loading = it },
-                            setError = { errorMsg = it },
-                            onSuccess = onLogin
-                        )
-                    }
+                    if (formOk) login(email, pass, { loading = it }, { errorMsg = it }, onLogin)
                 }
             ),
             modifier = Modifier.fillMaxWidth()
         )
 
-        if (errorMsg != null) {
+        errorMsg?.let {
             Spacer(Modifier.height(8.dp))
-            Text(errorMsg!!, color = MaterialTheme.colorScheme.error)
+            Text(it, color = MaterialTheme.colorScheme.error)
         }
 
-        Spacer(Modifier.height(16.dp))
+        Spacer(Modifier.height(20.dp))
 
-        // Botón Entrar
         Button(
-            onClick = {
-                doLogin(
-                    email = email,
-                    pass = pass,
-                    setLoading = { loading = it },
-                    setError = { errorMsg = it },
-                    onSuccess = onLogin
-                )
-            },
+            onClick = { login(email, pass, { loading = it }, { errorMsg = it }, onLogin) },
             enabled = formOk,
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth()
         ) {
             if (loading) {
-                CircularProgressIndicator(
-                    strokeWidth = 2.dp,
-                    modifier = Modifier
-                        .size(18.dp)
-                        .align(Alignment.CenterVertically)
-                )
+                CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(8.dp))
                 Text("Ingresando…")
-            } else {
-                Text("Entrar")
-            }
+            } else Text("Entrar")
         }
 
         Spacer(Modifier.height(12.dp))
-
-        // Ir a registro
-        OutlinedButton(
-            onClick = onGoRegister,
-            modifier = Modifier.fillMaxWidth()
-        ) {
+        OutlinedButton(onClick = onGoRegister, modifier = Modifier.fillMaxWidth()) {
             Text("Crear una cuenta")
-        }
-
-        Spacer(Modifier.height(24.dp))
-        ProvideTextStyle(MaterialTheme.typography.bodySmall) {
-            Text("Al continuar aceptas las políticas de uso y privacidad.")
         }
     }
 }
 
-// Regex simple para validar email
-private val EMAIL_REGEX = Regex("^[A-Za-z0-9+_.-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$")
-
-// ---- Lógica que llama al manager ----
-private fun doLogin(
+private fun login(
     email: String,
     pass: String,
     setLoading: (Boolean) -> Unit,
     setError: (String?) -> Unit,
-    onSuccess: () -> Unit
+    onLogin: () -> Unit
 ) {
     setError(null)
     setLoading(true)
-    FirebaseAuthManager.loginWithEmail(email, pass) { res ->
-        setLoading(false)
+
+    FirebaseAuthManager.login(email, pass) { res: Result ->
         when (res) {
-            is Result.Success -> onSuccess()
-            is Result.Error   -> setError(res.message ?: "Error iniciando sesión")
+            is Result.Success -> {
+                // (opcional) sincronizar mock si lo usas
+                // FirebaseMockLinker.syncCurrentUser()
+                setLoading(false)
+                onLogin()
+            }
+            is Result.Error -> {
+                setLoading(false)
+                setError(res.message ?: "Error iniciando sesión")
+            }
         }
     }
 }
+
+private fun FirebaseAuthManager.login(email: String, pass: String, function: Any) {}
+
+private val EMAIL_REGEX =
+    Regex("^[A-Za-z0-9+_.-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$")
