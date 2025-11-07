@@ -1,4 +1,3 @@
-
 package dev.miguelehr.truequeropa.auth
 
 import com.google.firebase.auth.FirebaseAuth
@@ -10,10 +9,14 @@ object FirebaseAuthManager {
         data class Error(val message: String?) : Result()
     }
 
-    // Sin KTX:
     private val auth: FirebaseAuth by lazy { FirebaseAuth.getInstance() }
 
-    fun registerWithEmail(email: String, password: String, callback: (Result) -> Unit) {
+    // ✅ Registro
+    fun register(
+        email: String,
+        password: String,
+        callback: (Result) -> Unit
+    ) {
         auth.createUserWithEmailAndPassword(email, password)
             .addOnCompleteListener { task ->
                 if (task.isSuccessful) callback(Result.Success)
@@ -21,7 +24,12 @@ object FirebaseAuthManager {
             }
     }
 
-    fun loginWithEmail(email: String, password: String, callback: (Result) -> Unit) {
+    // ✅ Login
+    fun login(
+        email: String,
+        password: String,
+        callback: (Result) -> Unit
+    ) {
         auth.signInWithEmailAndPassword(email, password)
             .addOnCompleteListener { task ->
                 if (task.isSuccessful) callback(Result.Success)
