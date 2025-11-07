@@ -1,11 +1,12 @@
 package dev.miguelehr.truequeropa.ui.screens
 
-import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
@@ -16,10 +17,10 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import coil.compose.AsyncImage
 import coil.compose.rememberAsyncImagePainter
 import dev.miguelehr.truequeropa.model.Category
 import dev.miguelehr.truequeropa.model.FakeRepository
@@ -59,16 +60,17 @@ fun OffersScreen(onOpenProduct: (String) -> Unit, padding: PaddingValues) {
 
     Column(
         modifier = Modifier
-            .fillMaxSize()
             .padding(padding)
+            .fillMaxSize()
+            .padding(horizontal = 16.dp, vertical = 12.dp)
     ) {
-        // Encabezado
+        // Título
         Text(
-            text = "Ofertas recientes",
+            "Explorar",
             style = MaterialTheme.typography.headlineSmall,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
+            fontWeight = FontWeight.SemiBold
         )
+        Spacer(Modifier.height(12.dp))
 
         // Buscador
         OutlinedTextField(
@@ -257,64 +259,73 @@ fun OffersScreen(onOpenProduct: (String) -> Unit, padding: PaddingValues) {
                     }
                 }
             }
+            items(Category.entries.size) { idx ->
+                val cat = Category.entries[idx]
+                FilterChip(
+                    selected = selectedCategory == cat,
+                    onClick = { selectedCategory = cat },
+                    label = { Text(cat.name) }
+                )
+            }
+        }
+
+        Spacer(Modifier.height(12.dp))
+
+        // --- Ofertas disponibles (debajo del buscador, como pediste)
+        Text("Ofertas disponibles", style = MaterialTheme.typography.titleMedium)
+        Spacer(Modifier.height(8.dp))
+
+        if (offers.isEmpty()) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text("No hay ofertas para esta categoría")
+            }
         } else {
             LazyColumn(
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+                modifier = Modifier.fillMaxSize()
             ) {
-                items(filteredProducts) { product ->
-                    EnhancedProductCard(
-                        product = product,
-                        onClick = { onOpenProduct(product.id) }
+                items(offers, key = { it.id }) { p ->
+                    OfferCard(
+                        product = p,
+                        onClick = { onOpenProduct(p.id, p.ownerId) }
                     )
                 }
+                item { Spacer(Modifier.height(8.dp)) }
             }
         }
     }
 }
 
 @Composable
-private fun EnhancedProductCard(
+private fun OfferCard(
     product: Product,
     onClick: () -> Unit
 ) {
     Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable { onClick() },
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-        shape = RoundedCornerShape(12.dp)
+        onClick = onClick,
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+        modifier = Modifier.fillMaxWidth()
     ) {
         Row(
+            verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.padding(12.dp)
         ) {
-            // Imagen del producto
-            Image(
-                painter = rememberAsyncImagePainter(product.imageUrl),
-                contentDescription = product.titulo,
-                modifier = Modifier
-                    .size(100.dp)
-                    .clip(RoundedCornerShape(8.dp)),
-                contentScale = ContentScale.Crop
-            )
-
-            Spacer(modifier = Modifier.width(12.dp))
-
-            // Información del producto
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(100.dp),
-                verticalArrangement = Arrangement.SpaceBetween
-            ) {
-                // Título
-                Text(
-                    text = product.titulo,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+            if (product.imageUrl.isNotBlank()) {
+                AsyncImage(
+                    model = product.imageUrl,
+                    contentDescription = product.titulo,
+                    modifier = Modifier
+                        .size(72.dp)
+                        .clip(RoundedCornerShape(10.dp))
                 )
+            } else {
+                Surface(
+                    tonalElevation = 1.dp,
+                    modifier = Modifier.size(72.dp).clip(RoundedCornerShape(10.dp))
+                ) {}
+            }
+
+            Spacer(Modifier.width(12.dp))
 
                 // Categoría, talla y color
                 Text(
@@ -326,35 +337,12 @@ private fun EnhancedProductCard(
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-
-                // Descripción
                 Text(
-                    text = product.descripcion,
+                    product.descripcion,
                     style = MaterialTheme.typography.bodySmall,
                     maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    overflow = TextOverflow.Ellipsis
                 )
-
-                // Estado
-                Surface(
-                    color = if (product.estado.name == "NUEVO")
-                        MaterialTheme.colorScheme.primaryContainer
-                    else
-                        MaterialTheme.colorScheme.secondaryContainer,
-                    shape = RoundedCornerShape(4.dp),
-                    modifier = Modifier.padding(top = 4.dp)
-                ) {
-                    Text(
-                        text = product.estado.name,
-                        style = MaterialTheme.typography.labelSmall,
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                        color = if (product.estado.name == "NUEVO")
-                            MaterialTheme.colorScheme.onPrimaryContainer
-                        else
-                            MaterialTheme.colorScheme.onSecondaryContainer
-                    )
-                }
             }
         }
     }
