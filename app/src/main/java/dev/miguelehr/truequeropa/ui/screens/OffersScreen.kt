@@ -11,20 +11,17 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
-import coil.compose.AsyncImage
 import coil.compose.rememberAsyncImagePainter
-import dev.miguelehr.truequeropa.R
 import dev.miguelehr.truequeropa.model.*
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun OffersScreen(
     onOpenProduct: (productId: String, ownerUserId: String) -> Unit,
-    onOpenUserSearch: () -> Unit = {}, // ya no lo usamos; lo dejamos por compatibilidad
+    onOpenUserSearch: () -> Unit = {}, // ya no se usa; lo dejamos por compatibilidad
     padding: PaddingValues
 ) {
     // --- estado de búsqueda & filtros ---
@@ -40,30 +37,30 @@ fun OffersScreen(
     val allUsers = remember { FakeRepository.users }
 
     // --- búsqueda en vivo: productos + personas ---
-    val results = remember(query, catFilter, sizeFilter, colorFilter, allProducts) {
+    val results: List<Product> = remember(query, catFilter, sizeFilter, colorFilter, allProducts) {
         val q = query.trim()
+
+        // usuarios que matchean el texto
         val usersMatchedIds: Set<String> =
-            if (q.isBlank()) emptySet() else allUsers
-                .filter {
-                    it.nombre.contains(q, ignoreCase = true) ||
-                            it.correo.contains(q, ignoreCase = true)
-                }
+            if (q.isBlank()) emptySet()
+            else allUsers
+                .filter { it.nombre.contains(q, ignoreCase = true) || it.correo.contains(q, ignoreCase = true) }
                 .map { it.id }
                 .toSet()
 
         allProducts
             .asSequence()
-            // match por texto del producto
+            // texto: título/descr o pertenece a un usuario cuyo nombre/correo calza
             .filter { p ->
                 if (q.isBlank()) true
-                else p.titulo.contains(q, ignoreCase = true) ||
-                        p.descripcion.contains(q, ignoreCase = true) ||
-                        p.ownerId in usersMatchedIds   // match por persona
+                else p.titulo.contains(q, ignoreCase = true)
+                        || p.descripcion.contains(q, ignoreCase = true)
+                        || p.ownerId in usersMatchedIds
             }
             // filtros
             .filter { p -> catFilter?.let { p.categoria == it } ?: true }
             .filter { p -> sizeFilter?.let { p.talla == it } ?: true }
-            // colorFilter solo visual: si quisieras, podrías mapear a una etiqueta en la descripción
+            // colorFilter solo visual (no se aplica a datos mock)
             .toList()
     }
 
@@ -188,25 +185,19 @@ fun OffersScreen(
 
         Spacer(Modifier.height(8.dp))
 
-        // --- resultados ---
-        if (results.isEmpty()) {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text("No hay resultados")
-            }
-        }
-
-        Spacer(Modifier.height(12.dp))
-
-        // --- Ofertas disponibles (debajo del buscador, como pediste)
+        // --- Ofertas disponibles (debajo del buscador)
         Text("Ofertas disponibles", style = MaterialTheme.typography.titleMedium)
         Spacer(Modifier.height(8.dp))
 
-        if (offers.isEmpty()) {
+        if (results.isEmpty()) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text("No hay ofertas para esta categoría")
+                Text("No hay ofertas para esta búsqueda")
             }
         } else {
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            LazyColumn(
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+                modifier = Modifier.fillMaxSize()
+            ) {
                 items(results, key = { it.id }) { p ->
                     OfferRowCard(
                         product = p,
