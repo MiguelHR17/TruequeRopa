@@ -15,6 +15,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import coil.compose.AsyncImage
 import coil.compose.rememberAsyncImagePainter
 import dev.miguelehr.truequeropa.R
 import dev.miguelehr.truequeropa.model.*
@@ -191,6 +192,18 @@ fun OffersScreen(
         if (results.isEmpty()) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Text("No hay resultados")
+            }
+        }
+
+        Spacer(Modifier.height(12.dp))
+
+        // --- Ofertas disponibles (debajo del buscador, como pediste)
+        Text("Ofertas disponibles", style = MaterialTheme.typography.titleMedium)
+        Spacer(Modifier.height(8.dp))
+
+        if (offers.isEmpty()) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text("No hay ofertas para esta categoría")
             }
         } else {
             LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {

@@ -66,6 +66,8 @@ data class BottomItem(
     val icon: androidx.compose.ui.graphics.vector.ImageVector
 )
 
+/* ========= APP NAV HOST ========= */
+
 @Composable
 fun AppNav(navController: NavHostController = rememberNavController()) {
 
@@ -74,7 +76,7 @@ fun AppNav(navController: NavHostController = rememberNavController()) {
         BottomItem(Route.NewProduct.path, "Publicar", Icons.Default.Add),
         BottomItem(Route.Proposals.path, "Propuestas", Icons.Default.Inbox),
         BottomItem(Route.History.path, "Historial", Icons.Default.History),
-        BottomItem(Route.Account.path, "Cuenta", Icons.Default.Person),
+        BottomItem(Route.Profile.path, "Cuenta", Icons.Default.Person),
     )
 
     val backstack by navController.currentBackStackEntryAsState()
@@ -89,20 +91,18 @@ fun AppNav(navController: NavHostController = rememberNavController()) {
                     NavigationBar {
                         val selected = currentRoute ?: Route.Offers.path
                         bottomItems.forEach { item ->
-                            val isAccount = item.route == Route.Account.path
+                            val isProfileButton = item.route == Route.Profile.path
+
                             NavigationBarItem(
                                 selected = selected == item.route,
                                 onClick = {
-                                    if (isAccount) {
-                                        showAccountMenu = true
-                                    } else {
-                                        navController.navigate(item.route) {
-                                            launchSingleTop = true
-                                            popUpTo(Route.Offers.path) { inclusive = false }
-                                        }
+                                    if (isProfileButton) showAccountMenu = true
+                                    else navController.navigate(item.route) {
+                                        launchSingleTop = true
+                                        popUpTo(Route.Offers.path) { inclusive = false }
                                     }
                                 },
-                                icon = { Icon(item.icon, contentDescription = item.label) },
+                                icon = { Icon(item.icon, item.label) },
                                 label = { Text(item.label) }
                             )
                         }
@@ -159,7 +159,9 @@ fun AppNav(navController: NavHostController = rememberNavController()) {
                             launchSingleTop = true
                         }
                     },
-                    onGoRegister = { navController.navigate(Route.Register.path) },
+                    onGoRegister = {
+                        navController.navigate(Route.Register.path)
+                    },
                     padding = padding
                 )
             }
