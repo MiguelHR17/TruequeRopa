@@ -46,6 +46,7 @@ sealed class Route(val path: String) {
     data object AdminPanel : Route("admin/panel")
 }
 
+
 /* ========= BOTTOM NAV ITEMS ========= */
 
 data class BottomItem(
@@ -63,6 +64,7 @@ fun AppNav(navController: NavHostController = rememberNavController()) {
         BottomItem(Route.Offers.path, "Ofertas", Icons.Default.Store),
         BottomItem(Route.NewProduct.path, "Publicar", Icons.Default.Add),
         BottomItem(Route.Proposals.path, "Propuestas", Icons.Default.Inbox),
+        BottomItem(Route.Notification.path, "Notificaciones", Icons.Default.Inbox),
         BottomItem(Route.History.path, "Historial", Icons.Default.History),
         BottomItem(Route.Profile.path, "Cuenta", Icons.Default.Person),
     )
