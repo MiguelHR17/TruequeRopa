@@ -7,6 +7,8 @@ import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Inbox
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Store
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -16,12 +18,14 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.DpOffset
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
 import dev.miguelehr.truequeropa.auth.FirebaseAuthManager
 import dev.miguelehr.truequeropa.ui.screens.*
 
@@ -82,6 +86,7 @@ fun AppNav(navController: NavHostController = rememberNavController()) {
     val backstack by navController.currentBackStackEntryAsState()
     val currentRoute = backstack?.destination?.route
     var showAccountMenu by remember { mutableStateOf(false) }
+    var proposalsBadge by remember { mutableStateOf(0) }
 
     Scaffold(
         bottomBar = {
@@ -96,13 +101,30 @@ fun AppNav(navController: NavHostController = rememberNavController()) {
                             NavigationBarItem(
                                 selected = selected == item.route,
                                 onClick = {
-                                    if (isProfileButton) showAccountMenu = true
-                                    else navController.navigate(item.route) {
-                                        launchSingleTop = true
-                                        popUpTo(Route.Offers.path) { inclusive = false }
+                                    if (isProfileButton) {
+                                        showAccountMenu = true
+                                    } else {
+                                        navController.navigate(item.route) {
+                                            launchSingleTop = true
+                                            popUpTo(Route.Offers.path) { inclusive = false }
+                                        }
                                     }
                                 },
-                                icon = { Icon(item.icon, item.label) },
+                                icon = {
+                                    if (item.route == Route.Proposals.path) {
+                                        BadgedBox(
+                                            badge = {
+                                                if (proposalsBadge > 0) {
+                                                    Badge { Text(proposalsBadge.toString()) }
+                                                }
+                                            }
+                                        ) {
+                                            Icon(item.icon, contentDescription = item.label)
+                                        }
+                                    } else {
+                                        Icon(item.icon, contentDescription = item.label)
+                                    }
+                                },
                                 label = { Text(item.label) }
                             )
                         }
@@ -111,7 +133,7 @@ fun AppNav(navController: NavHostController = rememberNavController()) {
                     DropdownMenu(
                         expanded = showAccountMenu,
                         onDismissRequest = { showAccountMenu = false },
-                        offset = androidx.compose.ui.unit.DpOffset(0.dp, (-8).dp)
+                        offset = DpOffset(0.dp, (-8).dp)
                     ) {
                         DropdownMenuItem(
                             text = { Text("Mi perfil") },
@@ -190,15 +212,15 @@ fun AppNav(navController: NavHostController = rememberNavController()) {
                     padding = padding
                 )
             }
-            composable(Route.NewProduct.path) {
-                ProductFormScreen(
-                    onSaved = { /* TODO: snackbar o navegación si quieres */ },
-                    padding = padding
+
+            // Propuestas (con badge)
+            composable(Route.Proposals.path) {
+                ProposalsInboxScreen(
+                    padding = padding,
+                    onUnreviewedCountChange = { proposalsBadge = it } // actualiza el badge del menú
                 )
             }
-            composable(Route.Proposals.path) {
-                ProposalsInboxScreen(padding = padding)
-            }
+
             composable(Route.History.path) {
                 TradeHistoryScreen(padding)
             }
@@ -215,7 +237,13 @@ fun AppNav(navController: NavHostController = rememberNavController()) {
                 )
             }
             // Perfil ajeno con pin opcional
-            composable(Route.ProfileById.path) { entry ->
+            composable(
+                route = Route.ProfileById.path,
+                arguments = listOf(
+                    navArgument("userId") { nullable = false },
+                    navArgument("pin") { nullable = true; defaultValue = "" }
+                )
+            ) { entry ->
                 val uid = entry.arguments?.getString("userId") ?: ""
                 val pin = entry.arguments?.getString("pin")
                 ProfileScreen(
@@ -239,6 +267,23 @@ fun AppNav(navController: NavHostController = rememberNavController()) {
             // ===== ADMIN =====
             composable(Route.AdminPanel.path) {
                 AdminPanelScreen(padding)
+            }
+
+            // === PUBLICAR ===
+            composable(Route.NewProduct.path) {
+                ProductFormScreen(
+                    onSaved = {
+                        // aquí decide qué quieres hacer tras guardar:
+                        // 1) Volver a Ofertas:
+                        // navController.navigate(Route.Offers.path) {
+                        //     popUpTo(Route.Offers.path) { inclusive = true }
+                        //     launchSingleTop = true
+                        // }
+
+                        // 2) O simplemente mostrar un snackbar (si lo implementas ahí)
+                    },
+                    padding = padding
+                )
             }
         }
     }
