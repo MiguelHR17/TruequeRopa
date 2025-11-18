@@ -1,11 +1,9 @@
 package dev.miguelehr.truequeropa.ui.screens
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -21,21 +19,26 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import dev.miguelehr.truequeropa.model.FakeRepository
-import dev.miguelehr.truequeropa.model.Product
+import dev.miguelehr.truequeropa.auth.FirebaseAuthManager
+import dev.miguelehr.truequeropa.data.FirestoreManager
+import dev.miguelehr.truequeropa.model.UserPost
+import androidx.compose.material.icons.filled.Delete
+import coil.compose.AsyncImage
+import androidx.compose.ui.layout.ContentScale
 
 /**
  * Pantalla de Perfil
  *
  * @param userId        Si es null => perfil del usuario autenticado
- * @param pinProductId  Si no es null, fija esa publicación arriba (si pertenece al perfil)
+ * @param pinProductId  (por ahora sin uso real, se usaba con FakeRepository)
  * @param onPublish     Navega a la pantalla de "Publicar"
- * @param onOpenProduct Acción al abrir una publicación (productId) — se usa en perfil propio
+ * @param onOpenProduct Acción al abrir una publicación (por ahora no se usa con UserPost)
  * @param padding       Padding del Scaffold
  */
 @Composable
 fun ProfileScreen(
     userId: String? = null,
-    pinProductId: String? = null,
+    pinProductId: String? = null, // reservado para futura lógica de "pin"
     onPublish: () -> Unit,
     onOpenProduct: (String) -> Unit,
     padding: PaddingValues
@@ -43,46 +46,11 @@ fun ProfileScreen(
     val me = remember { FakeRepository.currentUser }
     val myId = me.id
 
-    // Estados para flujo de propuesta (solo en perfil ajeno)
-    var proposeTarget by remember { mutableStateOf<Product?>(null) }
-    var showProposeSheet by remember { mutableStateOf(false) }
-
-    // Usuario del perfil
+    // Usuario del perfil (si userId es null, muestra mi propio perfil)
     val targetUser = remember(userId) {
         FakeRepository.users.find { it.id == userId } ?: me
     }
     val isMe = targetUser.id == me.id
-
-    // Publicaciones del propietario
-    val allPosts = remember(targetUser.id) {
-        FakeRepository.products.filter { it.ownerId == targetUser.id }
-    }
-
-    // Publicación fijada (pin) si pertenece al perfil
-    val pinned: Product? = remember(pinProductId, allPosts) {
-        if (pinProductId.isNullOrBlank()) null
-        else allPosts.find { it.id == pinProductId }
-    }
-
-    // Lista sin el pin (para no duplicar)
-    val restPosts = remember(pinned, allPosts) {
-        if (pinned == null) allPosts else allPosts.filter { it.id != pinned.id }
-    }
-
-    // “Paginación” simple en memoria
-    var shownCount by remember(targetUser.id) { mutableStateOf(minOf(6, restPosts.size)) }
-    val pageSize = 6
-    val listState = rememberLazyListState()
-    val shouldLoadMore by remember {
-        derivedStateOf {
-            val lastIndex = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1
-            lastIndex >= shownCount - 2 && shownCount < restPosts.size
-        }
-    }
-    LaunchedEffect(shouldLoadMore, restPosts.size) {
-        if (shouldLoadMore) shownCount = minOf(shownCount + pageSize, restPosts.size)
-    }
-    val posts = remember(shownCount, restPosts) { restPosts.take(shownCount) }
 
     Column(
         modifier = Modifier
@@ -96,12 +64,16 @@ fun ProfileScreen(
                 AsyncImage(
                     model = targetUser.photoUrl,
                     contentDescription = null,
-                    modifier = Modifier.size(72.dp).clip(CircleShape)
+                    modifier = Modifier
+                        .size(72.dp)
+                        .clip(CircleShape)
                 )
             } else {
                 Surface(
                     tonalElevation = 2.dp,
-                    modifier = Modifier.size(72.dp).clip(CircleShape)
+                    modifier = Modifier
+                        .size(72.dp)
+                        .clip(CircleShape)
                 ) {
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         Text(targetUser.nombre.take(1).uppercase())
@@ -135,11 +107,13 @@ fun ProfileScreen(
 
         Spacer(Modifier.height(12.dp))
 
-        // CTA Publicar (visible también en perfil ajeno si quieres esconderlo, condiciona con isMe)
+        // CTA Publicar
         Button(
             onClick = onPublish,
             modifier = Modifier.fillMaxWidth()
-        ) { Text("Publicar") }
+        ) {
+            Text("Publicar")
+        }
 
         Spacer(Modifier.height(12.dp))
 
@@ -150,148 +124,203 @@ fun ProfileScreen(
         )
         Spacer(Modifier.height(8.dp))
 
-        // ===== Lista =====
-        if (pinned == null && posts.isEmpty()) {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text(if (isMe) "Aún no has publicado prendas" else "Este usuario no tiene publicaciones")
-            }
-            return
-        }
-
-        LazyColumn(
-            state = listState,
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-            modifier = Modifier.fillMaxSize()
-        ) {
-            // Card fijada
-            if (pinned != null) {
-                item(key = "pin_${pinned.id}") {
-                    Text(
-                        "Publicación fijada",
-                        style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                    Spacer(Modifier.height(6.dp))
-                    ProfilePostCard(
-                        product = pinned,
-                        onOpen = {
-                            if (isMe) {
-                                onOpenProduct(pinned.id)
-                            } else {
-                                proposeTarget = pinned
-                                showProposeSheet = true
-                            }
-                        },
-                        pinned = true
-                    )
-                    Spacer(Modifier.height(6.dp))
-                    Divider()
-                    Spacer(Modifier.height(6.dp))
-                }
-            }
-
-            // Resto
-            items(posts, key = { it.id }) { product ->
-                ProfilePostCard(
-                    product = product,
-                    onOpen = {
-                        if (isMe) {
-                            onOpenProduct(product.id)
-                        } else {
-                            proposeTarget = product
-                            showProposeSheet = true
-                        }
-                    }
-                )
-            }
-
-            // Footer de carga (mock)
-            if (shownCount < restPosts.size) {
-                item {
-                    Box(
-                        Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 16.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        CircularProgressIndicator()
-                    }
-                }
-            } else {
-                item { Spacer(Modifier.height(8.dp)) }
-            }
-        }
-    }
-
-    // === Hoja/diálogo de selección multi-ítem para propuesta ===
-    if (showProposeSheet && proposeTarget != null) {
-        MultiOfferSheet(
-            target = proposeTarget!!,
-            onDismiss = { showProposeSheet = false },
-            onSend = { offeredIds ->
-                if (offeredIds.isNotEmpty()) {
-                    FakeRepository.sendProposal(
-                        fromUserId = myId,
-                        toUserId = proposeTarget!!.ownerId,
-                        offeredProductIds = offeredIds,
-                        requestedProductId = proposeTarget!!.id
-                    )
-                }
-                showProposeSheet = false
-            }
+        // ===== Listado REAL de publicaciones desde Firestore =====
+        // userId == null  => uso el usuario autenticado (mi perfil)
+        // userId != null   => perfil de otro usuario
+        UserPostsSection(
+            userId = if (isMe) null else targetUser.id,
+            isOwner = isMe,                    // 👈 solo el dueño puede eliminar
+            modifier = Modifier.weight(1f)
         )
     }
 }
 
+/**
+ * Sección que escucha en tiempo real las publicaciones de un usuario
+ * desde Firestore y las muestra en un LazyColumn.
+ *
+ * @param userId  Si es null => usa el uid del usuario autenticado
+ */
 @Composable
-private fun ProfilePostCard(
-    product: Product,
-    onOpen: () -> Unit,
-    pinned: Boolean = false
+fun UserPostsSection(
+    userId: String?,
+    isOwner: Boolean,
+    modifier: Modifier = Modifier
 ) {
-    val bg = if (pinned)
-        MaterialTheme.colorScheme.primaryContainer
-    else
-        MaterialTheme.colorScheme.surfaceVariant
+    val uidForProfile = userId ?: FirebaseAuthManager.currentUserId()
+    val posts = remember { mutableStateListOf<UserPost>() }
+    var loading by remember { mutableStateOf(true) }
+    var error by remember { mutableStateOf<String?>(null) }
+    var deletingId by remember { mutableStateOf<String?>(null) }
 
+    if (uidForProfile == null) {
+        Box(
+            modifier = modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center
+        ) {
+            Text("Debes iniciar sesión para ver tus publicaciones")
+        }
+        return
+    }
+
+    // Escuchar los posts del usuario en tiempo real
+    DisposableEffect(uidForProfile) {
+        val reg = FirestoreManager.listenPostsForUser(uidForProfile) { list, err ->
+            if (err != null) {
+                error = err
+                loading = false
+            } else {
+                posts.clear()
+                posts.addAll(list)
+                loading = false
+            }
+        }
+
+        onDispose { reg.remove() }
+    }
+
+    Box(
+        modifier = modifier.fillMaxSize()
+    ) {
+        when {
+            loading -> {
+                Box(
+                    Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator()
+                }
+            }
+
+            error != null -> {
+                Box(
+                    Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("Error cargando publicaciones: $error")
+                }
+            }
+
+            posts.isEmpty() -> {
+                Box(
+                    Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("Aún no hay publicaciones.")
+                }
+            }
+
+            else -> {
+                LazyColumn(
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    items(posts, key = { it.id }) { post ->
+                        UserPostCard(
+                            post = post,
+                            canDelete = isOwner,
+                            deleting = deletingId == post.id,
+                            onDelete = {
+                                deletingId = post.id
+                                FirestoreManager.deleteUserPost(post.id) { ok, err ->
+                                    if (!ok) {
+                                        error = err ?: "No se pudo eliminar la publicación"
+                                    }
+                                    deletingId = null
+                                }
+                            }
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun UserPostCard(
+    post: UserPost,
+    canDelete: Boolean,
+    deleting: Boolean,
+    onDelete: () -> Unit
+) {
     Card(
-        onClick = onOpen,
-        colors = CardDefaults.cardColors(containerColor = bg),
-        modifier = Modifier.fillMaxWidth()
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant
+        )
     ) {
         Column(Modifier.padding(12.dp)) {
-            if (product.imageUrl.isNotBlank()) {
+
+            // 👇 Mostrar la primera imagen (si hay)
+            val firstImage = post.imageUrls.firstOrNull()
+            if (firstImage != null) {
                 AsyncImage(
-                    model = product.imageUrl,
-                    contentDescription = product.titulo,
+                    model = firstImage,
+                    contentDescription = post.titulo,
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(160.dp)
-                        .clip(RoundedCornerShape(12.dp))
+                        .clip(RoundedCornerShape(12.dp)),
+                    contentScale = ContentScale.Crop
                 )
                 Spacer(Modifier.height(8.dp))
             }
 
+            // Título y descripción
             Text(
-                product.titulo,
+                post.titulo,
                 style = MaterialTheme.typography.titleMedium,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
+            Spacer(Modifier.height(4.dp))
             Text(
-                product.descripcion,
+                post.descripcion,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 2,
+                maxLines = 3,
                 overflow = TextOverflow.Ellipsis
             )
 
             Spacer(Modifier.height(8.dp))
 
+            // Tags de info básica
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                SmallTag(product.talla.name)
-                SmallTag(product.estado.name)
-                SmallTag(product.categoria.name)
+                SmallTag(post.talla)
+                SmallTag(post.estado)
+                SmallTag(post.categoria)
+            }
+
+            // Botón eliminar solo si es el dueño del perfil
+            if (canDelete) {
+                Spacer(Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    TextButton(
+                        onClick = onDelete,
+                        enabled = !deleting
+                    ) {
+                        if (deleting) {
+                            CircularProgressIndicator(
+                                strokeWidth = 2.dp,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(Modifier.width(6.dp))
+                            Text("Eliminando…")
+                        } else {
+                            Icon(
+                                imageVector = Icons.Filled.Delete,
+                                contentDescription = "Eliminar publicación"
+                            )
+                            Spacer(Modifier.width(4.dp))
+                            Text("Eliminar")
+                        }
+                    }
+                }
             }
         }
     }
@@ -307,78 +336,4 @@ private fun SmallTag(text: String) {
     ) {
         Text(text, style = MaterialTheme.typography.labelMedium, color = Color.Unspecified)
     }
-}
-
-/* ========== Sheet de selección multi-ítem para proponer trueque ========== */
-
-@Composable
-private fun MultiOfferSheet(
-    target: Product,
-    onDismiss: () -> Unit,
-    onSend: (List<String>) -> Unit
-) {
-    val myProducts = remember {
-        FakeRepository.products.filter { it.ownerId == FakeRepository.currentUser.id }
-    }
-    val selected = remember { mutableStateListOf<String>() }
-    val maxSelect = 5
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        confirmButton = {
-            Button(
-                onClick = { onSend(selected.toList()) },
-                enabled = selected.isNotEmpty()
-            ) { Text("Enviar propuesta") }
-        },
-        dismissButton = {
-            OutlinedButton(onClick = onDismiss) { Text("Cancelar") }
-        },
-        title = { Text("Proponer trueque") },
-        text = {
-            Column {
-                Text("Objetivo: ${target.titulo}", style = MaterialTheme.typography.bodyMedium)
-                Spacer(Modifier.height(8.dp))
-                Text("Elige hasta $maxSelect de tus prendas:")
-
-                Spacer(Modifier.height(8.dp))
-
-                myProducts.forEach { p ->
-                    val isChecked = p.id in selected
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 4.dp)
-                            .clickable {
-                                if (isChecked) selected.remove(p.id)
-                                else if (selected.size < maxSelect) selected.add(p.id)
-                            }
-                    ) {
-                        Checkbox(
-                            checked = isChecked,
-                            onCheckedChange = { checked ->
-                                if (checked) {
-                                    if (selected.size < maxSelect) selected.add(p.id)
-                                } else {
-                                    selected.remove(p.id)
-                                }
-                            }
-                        )
-                        Spacer(Modifier.width(8.dp))
-                        Text("${p.titulo} • ${p.categoria} • ${p.talla}")
-                    }
-                }
-
-                if (selected.size >= maxSelect) {
-                    Spacer(Modifier.height(6.dp))
-                    Text(
-                        "Has alcanzado el máximo de $maxSelect prendas.",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                }
-            }
-        }
-    )
 }

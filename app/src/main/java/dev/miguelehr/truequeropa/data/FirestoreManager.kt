@@ -2,6 +2,9 @@ package dev.miguelehr.truequeropa.data
 
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.ListenerRegistration
+import com.google.firebase.firestore.Query
+import dev.miguelehr.truequeropa.model.UserPost
 
 //FirestoreManager
 object FirestoreManager {
@@ -24,5 +27,75 @@ object FirestoreManager {
             .set(data)
             .addOnSuccessListener { onComplete(true, null) }
             .addOnFailureListener { onComplete(false, it.localizedMessage) }
+    }
+    // ---------- CREAR PUBLICACIÓN DE USUARIO ----------
+    fun createUserPost(
+        uid: String,
+        titulo: String,
+        descripcion: String,
+        categoria: String,
+        talla: String,
+        estado: String,
+        imageUrls: List<String>,
+        onComplete: (Boolean, String?) -> Unit
+    ) {
+        val data = hashMapOf(
+            "userId" to uid,
+            "titulo" to titulo,
+            "descripcion" to descripcion,
+            "categoria" to categoria,
+            "talla" to talla,
+            "estado" to estado,
+            "imageUrls" to imageUrls,
+            "createdAt" to FieldValue.serverTimestamp()
+        )
+
+        db.collection("posts")
+            .add(data)
+            .addOnSuccessListener { onComplete(true, null) }
+            .addOnFailureListener { e -> onComplete(false, e.localizedMessage) }
+    }
+
+    // ---------- ESCUCHAR PUBLICACIONES DE UN USUARIO ----------
+    fun listenPostsForUser(
+        uid: String,
+        onChange: (List<UserPost>, String?) -> Unit
+    ): ListenerRegistration {
+        return db.collection("posts")
+            .whereEqualTo("userId", uid)
+            .orderBy("createdAt", Query.Direction.DESCENDING)
+            .addSnapshotListener { snap, e ->
+                if (e != null) {
+                    onChange(emptyList(), e.localizedMessage)
+                    return@addSnapshotListener
+                }
+
+                val posts = snap?.documents?.map { doc ->
+                    UserPost(
+                        id = doc.id,
+                        userId = doc.getString("userId") ?: "",
+                        titulo = doc.getString("titulo") ?: "",
+                        descripcion = doc.getString("descripcion") ?: "",
+                        categoria = doc.getString("categoria") ?: "",
+                        talla = doc.getString("talla") ?: "",
+                        estado = doc.getString("estado") ?: "",
+                        imageUrls = (doc.get("imageUrls") as? List<*>)?.filterIsInstance<String>()
+                            ?: emptyList(),
+                        createdAt = doc.getTimestamp("createdAt")
+                    )
+                } ?: emptyList()
+
+                onChange(posts, null)
+            }
+    }
+    fun deleteUserPost(
+        postId: String,
+        onComplete: (Boolean, String?) -> Unit
+    ) {
+        db.collection("posts")
+            .document(postId)
+            .delete()
+            .addOnSuccessListener { onComplete(true, null) }
+            .addOnFailureListener { e -> onComplete(false, e.localizedMessage) }
     }
 }
