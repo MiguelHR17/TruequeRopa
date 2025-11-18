@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -28,6 +29,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -36,7 +38,6 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -51,17 +52,30 @@ import androidx.compose.ui.unit.dp
 import coil.compose.rememberAsyncImagePainter
 import dev.miguelehr.truequeropa.model.Category
 import dev.miguelehr.truequeropa.model.Condition
-import dev.miguelehr.truequeropa.model.Product
 import dev.miguelehr.truequeropa.model.Size
+import dev.miguelehr.truequeropa.auth.FirebaseAuthManager
+import dev.miguelehr.truequeropa.data.FirestoreManager
 
 @Composable
-fun ProductFormScreen(onSaved: () -> Unit, padding: PaddingValues) {
+fun ProductFormScreen(
+    onSaved: () -> Unit,
+    padding: PaddingValues
+) {
     var titulo by remember { mutableStateOf("") }
     var descripcion by remember { mutableStateOf("") }
     var selectedCategory by remember { mutableStateOf<Category?>(null) }
     var selectedSize by remember { mutableStateOf<Size?>(null) }
     var selectedCondition by remember { mutableStateOf(Condition.USADO) }
     var selectedImages by remember { mutableStateOf(listOf<Uri>()) }
+
+    // estado para guardado
+    var saving by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+
+    val canSave = titulo.isNotBlank()
+            && descripcion.isNotBlank()
+            && selectedCategory != null
+            && selectedSize != null
 
     // Launcher para seleccionar imágenes
     val imagePickerLauncher = rememberLauncherForActivityResult(
@@ -89,7 +103,7 @@ fun ProductFormScreen(onSaved: () -> Unit, padding: PaddingValues) {
             modifier = Modifier.padding(bottom = 24.dp)
         )
 
-        // Campo: Tipo de producto
+        // Campo: Título
         Text(
             text = "Título del producto",
             style = MaterialTheme.typography.bodyMedium,
@@ -211,7 +225,11 @@ fun ProductFormScreen(onSaved: () -> Unit, padding: PaddingValues) {
                         modifier = Modifier
                             .size(140.dp)
                             .clip(RoundedCornerShape(12.dp))
-                            .border(2.dp, Color.Gray.copy(alpha = 0.3f), RoundedCornerShape(12.dp))
+                            .border(
+                                2.dp,
+                                Color.Gray.copy(alpha = 0.3f),
+                                RoundedCornerShape(12.dp)
+                            )
                             .clickable {
                                 imagePickerLauncher.launch("image/*")
                             },
@@ -276,51 +294,81 @@ fun ProductFormScreen(onSaved: () -> Unit, padding: PaddingValues) {
             }
         }
 
-        Spacer(Modifier.height(16.dp))
+        // Mensaje de error (si lo hay)
+        error?.let {
+            Text(
+                text = it,
+                color = MaterialTheme.colorScheme.error,
+                modifier = Modifier.padding(bottom = 8.dp)
+            )
+        }
 
-        // Botón de registrar
+        // Botón para publicar en el perfil
         Button(
             onClick = {
-                if (titulo.isNotBlank() && selectedCategory != null && selectedSize != null) {
-                    val newProduct = Product(
-                        id = "prod_${System.currentTimeMillis()}",
-                        ownerId = "current_user", // TODO: obtener del usuario autenticado
-                        titulo = titulo,
-                        descripcion = descripcion,
-                        talla = selectedSize!!,
-                        estado = selectedCondition,
-                        categoria = selectedCategory!!,
-                        imageUrl = selectedImages.firstOrNull()?.toString() ?: "https://via.placeholder.com/300"
-                    )
+                val uid = FirebaseAuthManager.currentUserId()
+                if (uid == null) {
+                    error = "Debes iniciar sesión para publicar."
+                    return@Button
+                }
 
-                    // TODO: Guardar en Firestore
-                    // FakeRepository.addProduct(newProduct)
+                saving = true
+                error = null
 
-                    onSaved()
+                // Por ahora guardamos las imágenes como uri.toString().
+                // Más adelante puedes reemplazar esto por URLs reales de Firebase Storage.
+                val imageUrlStrings = selectedImages.map { it.toString() }
 
-                    // Limpiar formulario
-                    titulo = ""
-                    descripcion = ""
-                    selectedCategory = null
-                    selectedSize = null
-                    selectedCondition = Condition.USADO
-                    selectedImages = emptyList()
+                FirestoreManager.createUserPost(
+                    uid = uid,
+                    titulo = titulo.trim(),
+                    descripcion = descripcion.trim(),
+                    categoria = selectedCategory!!.name,
+                    talla = selectedSize!!.name,
+                    estado = selectedCondition.name,
+                    imageUrls = imageUrlStrings
+                ) { ok, err ->
+                    saving = false
+                    if (ok) {
+                        // Limpiar formulario
+                        titulo = ""
+                        descripcion = ""
+                        selectedCategory = null
+                        selectedSize = null
+                        selectedCondition = Condition.USADO
+                        selectedImages = emptyList()
+
+                        onSaved() // volver al perfil, por ejemplo
+                    } else {
+                        error = err ?: "No se pudo guardar la publicación"
+                    }
                 }
             },
             modifier = Modifier
                 .fillMaxWidth()
                 .height(56.dp),
-            enabled = titulo.isNotBlank() && selectedCategory != null && selectedSize != null,
+            enabled = canSave && !saving,
             colors = ButtonDefaults.buttonColors(
                 containerColor = MaterialTheme.colorScheme.primary
             )
         ) {
-            Text(
-                text = "REGISTRAR",
-                style = MaterialTheme.typography.labelLarge,
-                fontWeight = FontWeight.Bold
-            )
+            if (saving) {
+                CircularProgressIndicator(
+                    strokeWidth = 2.dp,
+                    modifier = Modifier.size(20.dp)
+                )
+                Spacer(Modifier.width(8.dp))
+                Text("Publicando…")
+            } else {
+                Text(
+                    text = "Publicar en mi perfil",
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold
+                )
+            }
         }
+
+        Spacer(Modifier.height(16.dp))
     }
 }
 
