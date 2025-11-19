@@ -3,6 +3,7 @@ package dev.miguelehr.truequeropa.data
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 
+//FirestoreManager
 object FirestoreManager {
     private val db: FirebaseFirestore by lazy { FirebaseFirestore.getInstance() }
 
