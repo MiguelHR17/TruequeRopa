@@ -1,5 +1,7 @@
 package dev.miguelehr.truequeropa.model
 
+import com.google.firebase.Timestamp
+
 enum class Size { XS, S, M, L, XL }
 enum class Condition { NUEVO, USADO }
 enum class Category { CAMISA, PANTALON, VESTIDO, CHAQUETA, ZAPATOS, ACCESORIO }
@@ -13,11 +15,18 @@ data class User(
     val photoUrl: String? = null // si aún no lo tenías, añádelo aquí
 )
 
+data class UserProfile(
+    val uid:String="",
+    val nombre:String="",
+    val email:String="",
+    val createdAt: Timestamp? = null
+)
+
 data class Product(
     val id:String,
     val ownerId:String,
     val titulo:String,
-    val descripcion:String,
+val descripcion:String,
     val talla:Size,
     val estado:Condition,
     val categoria:Category,
