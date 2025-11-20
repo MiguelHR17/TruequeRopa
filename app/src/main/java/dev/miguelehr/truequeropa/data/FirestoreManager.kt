@@ -1,5 +1,6 @@
 package dev.miguelehr.truequeropa.data
 
+import com.google.firebase.Timestamp
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.ListenerRegistration
@@ -101,4 +102,31 @@ object FirestoreManager {
             .addOnSuccessListener { onComplete(true, null) }
             .addOnFailureListener { e -> onComplete(false, e.localizedMessage) }
     }
+
+    fun CreateUserRequest(
+        solicitudId: String,
+        userIdPropietario: String,
+        userIdSolicitante: String,
+        prendaIdSolicitante: String,
+        prendaIdPropietario: String,
+        estado: String,
+        fechaAprobacion: Timestamp,
+        onComplete: (Boolean, String?) -> Unit
+    ){
+        val data = hashMapOf(
+            "solicitudId" to solicitudId,
+            "userIdPropietario" to userIdPropietario,
+            "userIdSolicitante" to userIdSolicitante,
+            "prendaIdSolicitante" to prendaIdSolicitante,
+            "prendaIdPropietario" to prendaIdPropietario,
+            "estado" to estado,
+            "fechaAprobacion" to fechaAprobacion,
+            "createdAt" to FieldValue.serverTimestamp()
+        )
+        db.collection("request")
+            .add(data)
+            .addOnSuccessListener { onComplete(true, null) }
+            .addOnFailureListener { e -> onComplete(false, e.localizedMessage) }
+    }
+
 }
