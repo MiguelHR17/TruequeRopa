@@ -137,9 +137,28 @@ object FirestoreManager {
             .addOnFailureListener { e -> onComplete(false, e.localizedMessage) }
     }
 
+    suspend fun UpdateEstadoUserRequest(
+        requestId : String,
+        estado : String
+    )
+    {
+
+        val requestDoc = db.collection("request").document(requestId)
+
+        // Prepara los datos a actualizar
+        val updates = mapOf(
+            "estado" to estado,      // 1 para Aprobado
+            "fechaAprobacion" to FieldValue.serverTimestamp() // Opcional: guarda la fecha de aprobación
+        )
+
+        requestDoc.set(updates).await()
+    }
+
     suspend fun getUserRequestDetails(requestId: String): UserRequestDetails? {
         val requestDoc = db.collection("request").document(requestId).get().await()
         val request = requestDoc.toObject(UserRequest::class.java) ?: return null
+
+        val requestWithId = request?.copy(id = requestDoc.id)
 
         val propietarioPostDoc = db.collection("posts").document(request.postIdPropietario).get().await()
         val propietarioPost = propietarioPostDoc.toObject(UserPost::class.java) ?: return null

@@ -5,6 +5,8 @@ import com.google.firebase.Timestamp
 enum class Size { XS, S, M, L, XL }
 enum class Condition { NUEVO, USADO }
 enum class Category { CAMISA, PANTALON, VESTIDO, CHAQUETA, ZAPATOS, ACCESORIO }
+public  enum class ProposalStatus { PENDIENTE, ACEPTADA, RECHAZADA }
+
 
 data class User(
     val id:String,
@@ -43,7 +45,7 @@ data class TradeProposal(
     val status: ProposalStatus = ProposalStatus.PENDIENTE
 )
 
-enum class ProposalStatus { PENDIENTE, ACEPTADA, RECHAZADA }
+
 
 data class TradeHistoryItem(
     val id:String,

@@ -139,7 +139,7 @@ fun ProposalsInboxScreen(
                         )
 
                         // Punto rojo si “Aún no revisado” y la card está colapsada
-                        if (!p.reviewed && !isExpanded) {
+                        if (!p .reviewed && !isExpanded) {
                             Box(
                                 modifier = Modifier
                                     .size(10.dp)
