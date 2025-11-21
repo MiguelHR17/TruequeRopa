@@ -55,7 +55,6 @@ import dev.miguelehr.truequeropa.model.Condition
 import dev.miguelehr.truequeropa.model.Size
 import dev.miguelehr.truequeropa.auth.FirebaseAuthManager
 import dev.miguelehr.truequeropa.data.FirestoreManager
-import java.util.UUID
 
 @Composable
 fun ProductFormScreen(
@@ -322,7 +321,6 @@ fun ProductFormScreen(
 
                 FirestoreManager.createUserPost(
                     uid = uid,
-                    prendaId = UUID.randomUUID().toString(),
                     titulo = titulo.trim(),
                     descripcion = descripcion.trim(),
                     categoria = selectedCategory!!.name,

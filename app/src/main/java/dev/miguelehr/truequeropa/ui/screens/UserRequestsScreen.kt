@@ -1,5 +1,6 @@
 package dev.miguelehr.truequeropa.ui.screens
 
+import android.text.Selection
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.Image
@@ -60,7 +61,8 @@ fun UserRequestsScreen(
     userId: String,
     viewModel: UserRequestsViewModel = viewModel(),
     padding: PaddingValues = PaddingValues(0.dp),
-    onUnreviewedCountChange: (Int) -> Unit = {}
+    onUnreviewedCountChange: (Int) -> Unit = {},
+    onNavigateToUserPosts: (String, String, String) -> Unit
 ) {
     viewModel.fetchUserRequests(userId)
     val userRequests by viewModel.userRequests.collectAsState()
@@ -82,10 +84,10 @@ fun UserRequestsScreen(
 
         item {
             Text(
-                "PROPUESTAS",
-                style = MaterialTheme.typography.headlineMedium,
+                "Propuesta de Intercambio",
+                style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(top = 8.dp)
+                modifier = Modifier.padding(top = 6.dp)
             )
         }
 
@@ -94,7 +96,6 @@ fun UserRequestsScreen(
         itemsIndexed(userRequests, key = { index, _ -> index }) { index, details ->
             val isExpanded = index in expandedIds
                 UserRequestItem(
-                    index = index,
                     details = details,
                     isExpanded = isExpanded,
                     onToggle = {
@@ -112,10 +113,13 @@ fun UserRequestsScreen(
                         expandedIds = expandedIds - index
                     },
                     onReject = {
-                        viewModel.acceptRequest(details.request.id,details.propietarioProfile.uid) // Asumiendo que ahora tienes 'solicitudId'
+                        viewModel.rejectRequest(details.request.id,details.propietarioProfile.uid) // Asumiendo que ahora tienes 'solicitudId'
 
                         // Colapsa la tarjeta después de la acción
                         expandedIds = expandedIds - index
+                    },
+                    onNavigateToUserPosts = {
+                        onNavigateToUserPosts(details.solicitanteProfile.uid,details.solicitanteProfile.nombre,details.request.id.toString())
                     }
                 )
         }
@@ -124,17 +128,17 @@ fun UserRequestsScreen(
 }
 @Composable
 fun UserRequestItem(
-    index: Int,
     details: UserRequestDetails,
     isExpanded: Boolean,
     onToggle: () -> Unit ,
     onAccept: () -> Unit,
-    onReject: () -> Unit
+    onReject: () -> Unit,
+    onNavigateToUserPosts: () -> Unit
 ) {
     ElevatedCard(
         colors = CardDefaults.elevatedCardColors(
             containerColor = when (details.request.estado) {
-                "0" -> Color(0xFFC5F08F)    // verde suave
+                "0" -> Color(0xFFC5E1A5)    // verde suave
                 "1" -> Color(0xFFD4EDDA)    // verde suave
                 "2" -> Color(0xFFF8D7DA)   // rojo suave
                 else -> MaterialTheme.colorScheme.surfaceVariant
@@ -186,7 +190,7 @@ fun UserRequestItem(
                     Spacer(Modifier.height(4.dp))
                     Image(
                         painter = rememberAsyncImagePainter("https://picsum.photos/seed/my1/600/800"),
-                        contentDescription = null,
+                        contentDescription = details.propietarioPost.descripcion,
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(140.dp)
@@ -196,11 +200,24 @@ fun UserRequestItem(
 
                     Spacer(Modifier.height(12.dp))
 
-                    Text("Prenda de ${details.solicitanteProfile.nombre}:", fontWeight = FontWeight.Medium)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically, // Alinea el texto y el botón verticalmente
+                        horizontalArrangement = Arrangement.SpaceBetween // Empuja el texto a la izquierda y el botón a la derecha
+                    ) {
+                        Text(
+                            text = "Prenda de ${details.solicitanteProfile.nombre}:",
+                            fontWeight = FontWeight.Medium
+                        )
+                        FilledTonalButton(onClick =  onNavigateToUserPosts ) {
+                            Text("Publicaciones")
+                        }
+                    }
+
                     Spacer(Modifier.height(4.dp))
                     Image(
                         painter = rememberAsyncImagePainter("https://picsum.photos/seed/his4/600/800"),
-                        contentDescription = null,
+                        contentDescription = details.solicitantePost.descripcion,
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(140.dp)
@@ -211,49 +228,30 @@ fun UserRequestItem(
                     Spacer(Modifier.height(16.dp))
 
                     // Acciones
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Button(
-                            onClick = onAccept,
-                            modifier = Modifier.weight(1f)
-                        ) { Text("Aceptar ✅") }
+                    if (details.request.estado == "0") {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Button(
+                                onClick = onAccept,
+                                modifier = Modifier.weight(1f)
+                            ) { Text("Aceptar") }
 
-                        OutlinedButton(
-                            onClick = onReject,
-                            modifier = Modifier.weight(1f)
-                        ) { Text("Rechazar ❌") }
+                            OutlinedButton(
+                                onClick = onReject,
+                                modifier = Modifier.weight(1f)
+                            ) { Text("Rechazar") }
+                        }
                     }
 
-                    Spacer(Modifier.height(10.dp))
-
-                    // Toggle Revisado / Aún no revisado
-                    //  val isReviewed = proposals.find { it.id == p.id }?.reviewed == true
-                    //   FilledTonalButton(
-                    //      onClick = {
-                    //         proposals = proposals.map {
-                    //             if (it.id == p.id) it.copy(reviewed = !it.reviewed)
-                    //             else it
-                    //        }
-                    //    },
-                    //    modifier = Modifier.fillMaxWidth()
-                    // ) {
-                    //      Text(
-                    //         if (isReviewed) "Marcar como AÚN NO REVISADO"
-                    //        else "Marcar como REVISADO"
-                    //     )
-                    // }
-
-                    // Mensaje de estado
-                    if (details.request.estado != "0") {
-                        Spacer(Modifier.height(8.dp))
-                        Text(
-                            if (details.request.estado == "1") "✅ Propuesta aceptada"
-                            else "❌ Propuesta rechazada",
-                            fontWeight = FontWeight.SemiBold
-                        )
-                    }
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        if (details.request.estado == "1") "✅ Propuesta aceptada"
+                        else if(details.request.estado == "2") "❌ Propuesta rechazada"
+                        else "! Propuesta pendiente",
+                        fontWeight = FontWeight.SemiBold
+                    )
                 }
             }
 

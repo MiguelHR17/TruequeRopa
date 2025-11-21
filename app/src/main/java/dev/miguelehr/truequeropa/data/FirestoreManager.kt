@@ -9,6 +9,7 @@ import com.google.firebase.firestore.Query
 import dev.miguelehr.truequeropa.model.UserRequest
 import dev.miguelehr.truequeropa.model.User
 import dev.miguelehr.truequeropa.model.UserPost
+import dev.miguelehr.truequeropa.model.UserPostsDetails
 import dev.miguelehr.truequeropa.model.UserProfile
 import dev.miguelehr.truequeropa.model.UserRequestDetails
 import kotlinx.coroutines.tasks.await
@@ -38,7 +39,6 @@ object FirestoreManager {
     // ---------- CREAR PUBLICACIÓN DE USUARIO ----------
     fun createUserPost(
         uid: String,
-        prendaId : String,
         titulo: String,
         descripcion: String,
         categoria: String,
@@ -49,7 +49,6 @@ object FirestoreManager {
     ) {
         val data = hashMapOf(
             "userId" to uid,
-            "prendaId" to prendaId,
             "titulo" to titulo,
             "descripcion" to descripcion,
             "categoria" to categoria,
@@ -83,7 +82,6 @@ object FirestoreManager {
                     UserPost(
                         id = doc.id,
                         userId = doc.getString("userId") ?: "",
-                        prendaId = doc.getString("prendaId") ?: "",
                         titulo = doc.getString("titulo") ?: "",
                         descripcion = doc.getString("descripcion") ?: "",
                         categoria = doc.getString("categoria") ?: "",
@@ -151,14 +149,14 @@ object FirestoreManager {
             "fechaAprobacion" to FieldValue.serverTimestamp() // Opcional: guarda la fecha de aprobación
         )
 
-        requestDoc.set(updates).await()
+        requestDoc.update(updates).await()
     }
 
     suspend fun getUserRequestDetails(requestId: String): UserRequestDetails? {
         val requestDoc = db.collection("request").document(requestId).get().await()
         val request = requestDoc.toObject(UserRequest::class.java) ?: return null
 
-        val requestWithId = request?.copy(id = requestDoc.id)
+        val requestWithId = request.copy(id = requestDoc.id)
 
         val propietarioPostDoc = db.collection("posts").document(request.postIdPropietario).get().await()
         val propietarioPost = propietarioPostDoc.toObject(UserPost::class.java) ?: return null
@@ -173,7 +171,7 @@ object FirestoreManager {
         val solicitanteProfile = solicitanteProfileDoc.toObject(UserProfile::class.java) ?: return null
 
         return UserRequestDetails(
-            request,
+            requestWithId,
             propietarioProfile,
             solicitanteProfile,
             propietarioPost,
@@ -246,5 +244,61 @@ object FirestoreManager {
 
         Log.d(TAG, "Retornando ${requests.size} solicitudes detalladas en total.")
         return requests.sortedByDescending { it.request.createdAt } // Opcional: ordenar por fecha
+    }
+
+    suspend fun getUserPostDetails(PostsId: String): UserPostsDetails? {
+
+        val solicitantePostDoc = db.collection("posts").document(PostsId).get().await()
+        val solicitantePost = solicitantePostDoc.toObject(UserPost::class.java) ?: return null
+
+        val postsWithId = solicitantePost.copy(id = solicitantePostDoc.id)
+
+
+        val solicitanteProfileDoc = db.collection("users").document(solicitantePost.userId).get().await()
+        val solicitanteProfile = solicitanteProfileDoc.toObject(UserProfile::class.java) ?: return null
+
+        return UserPostsDetails(
+            solicitanteProfile,
+            postsWithId
+        )
+    }
+
+    suspend fun getAllUserPostDetailsForUser(userId: String): List<UserPostsDetails> {
+        val TAG = "FirestoreManager"
+        Log.d(TAG, "Buscando prendas para el userId: $userId")
+
+        val posts = mutableListOf<UserPostsDetails>()
+        val processedPostsIds = mutableSetOf<String>() // Para evitar duplicados
+
+        try {
+            // Primero, obtenemos todos los posts del usuario.
+            val userPostsSnapshot = db.collection("posts")
+                .whereEqualTo("userId", userId)
+                .get()
+                .await()
+
+            val userPostIds = userPostsSnapshot.documents.map { it.id }
+
+            if (userPostIds.isEmpty()) {
+                Log.d(TAG, "El usuario $userId no tiene posts, no se pueden encontrar solicitudes.")
+                return emptyList()
+            }
+
+            for (document in userPostsSnapshot.documents) {
+                if (processedPostsIds.add(document.id)) { // Añade si no existe
+                    val details = getUserPostDetails(document.id)
+                    if (details != null) {
+                        posts.add(details)
+                    } else {
+                        Log.w(TAG, "No se pudieron obtener detalles para la solicitud (como propietario): ${document.id}")
+                    }
+                }
+            }
+
+        } catch (e: Exception) {
+            Log.e(TAG, "Error al obtener las solicitudes de usuario", e)
+        }
+
+        return posts.sortedByDescending { it.solicitantePost.createdAt } // .sortedByDescending { it.request.createdAt }
     }
 }

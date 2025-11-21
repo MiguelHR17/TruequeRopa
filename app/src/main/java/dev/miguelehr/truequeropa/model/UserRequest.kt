@@ -14,9 +14,15 @@ data class UserRequest(
     val reviewed: Boolean = false
 )
 data class UserRequestDetails(
+
     val request: UserRequest,
     val propietarioProfile: UserProfile,
     val solicitanteProfile: UserProfile,
     val propietarioPost: UserPost,
+    val solicitantePost: UserPost
+)
+
+data class UserPostsDetails(
+    val solicitanteProfile: UserProfile,
     val solicitantePost: UserPost
 )

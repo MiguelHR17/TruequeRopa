@@ -40,6 +40,7 @@ sealed class Route(val path: String) {
     data object NewProduct : Route("home/new")
     data object Proposals : Route("home/proposals")
     data object UserRequests : Route("home/requests")
+    data object UserPostsRequests : Route("publicationPosts/{userId}/{nombre}/{requestId}")
     data object History : Route("home/history")
 
     // Perfil propio
@@ -79,7 +80,7 @@ fun AppNav(navController: NavHostController = rememberNavController()) {
     val bottomItems = listOf(
         BottomItem(Route.Offers.path, "Ofertas", Icons.Default.Store),
         BottomItem(Route.NewProduct.path, "Publicar", Icons.Default.Add),
-        BottomItem(Route.Proposals.path, "PropuestasX", Icons.Default.Inbox),
+      //  BottomItem(Route.Proposals.path, "PropuestasX", Icons.Default.Inbox),
         BottomItem(Route.UserRequests.path, "Propuestas", Icons.Default.Inbox),
         BottomItem(Route.History.path, "Historial", Icons.Default.History),
         BottomItem(Route.Profile.path, "Cuenta", Icons.Default.Person),
@@ -90,6 +91,7 @@ fun AppNav(navController: NavHostController = rememberNavController()) {
     var showAccountMenu by remember { mutableStateOf(false) }
     var proposalsBadge by remember { mutableStateOf(0) }
     var requestsBadge by remember { mutableStateOf(0) }
+
 
     Scaffold(
         bottomBar = {
@@ -241,9 +243,31 @@ fun AppNav(navController: NavHostController = rememberNavController()) {
                     UserRequestsScreen(
                         userId = currentUserId,
                         padding = padding,
-                        onUnreviewedCountChange = { requestsBadge = it }
+                        onUnreviewedCountChange = { requestsBadge = it },
+                        onNavigateToUserPosts = { solicitanteId, solicitanteNombre, requestId ->
+                            // 2. Aquí, la NAVEGACIÓN TOMA el ID del botón
+                            val route = Route.UserPostsRequests.path
+                                .replace("{userId}", solicitanteId)
+                                .replace("{nombre}", solicitanteNombre)
+                                .replace("{requestId}", requestId)
+                            navController.navigate(route)
+                        }
+
                     )
                 }
+            }
+
+            composable(Route.UserPostsRequests.path) {  backStackEntry ->
+                val userId = backStackEntry.arguments?.getString("userId") ?: ""
+                val nombre = backStackEntry.arguments?.getString("nombre") ?: ""
+                val requestId = backStackEntry.arguments?.getString("requestId") ?: ""
+
+                PublicationPostsScreen(
+                    userId = userId,
+                    nombre = nombre,
+                    requestId = requestId
+
+                )
             }
 
             composable(Route.History.path) {
