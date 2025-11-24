@@ -39,6 +39,7 @@ object FirestoreManager {
     // ---------- CREAR PUBLICACIÓN DE USUARIO ----------
     fun createUserPost(
         uid: String,
+        prendaId : String,
         titulo: String,
         descripcion: String,
         categoria: String,
@@ -49,6 +50,7 @@ object FirestoreManager {
     ) {
         val data = hashMapOf(
             "userId" to uid,
+            "prendaId" to prendaId,
             "titulo" to titulo,
             "descripcion" to descripcion,
             "categoria" to categoria,
@@ -82,6 +84,7 @@ object FirestoreManager {
                     UserPost(
                         id = doc.id,
                         userId = doc.getString("userId") ?: "",
+                        prendaId = doc.getString("prendaId") ?: "",
                         titulo = doc.getString("titulo") ?: "",
                         descripcion = doc.getString("descripcion") ?: "",
                         categoria = doc.getString("categoria") ?: "",

@@ -5,6 +5,7 @@ import com.google.firebase.Timestamp
 data class UserPost(
     val id: String = "",            // id del documento en Firestore
     val userId: String = "",        // uid de Firebase del dueño
+    val prendaId :String = "",
     val titulo: String = "",
     val descripcion: String = "",
     val categoria: String = "",     // guardamos el name() del enum
