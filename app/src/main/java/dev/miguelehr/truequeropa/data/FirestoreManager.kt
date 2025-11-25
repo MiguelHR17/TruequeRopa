@@ -155,6 +155,24 @@ object FirestoreManager {
         requestDoc.update(updates).await()
     }
 
+    suspend fun UpdatePostSolicitante(
+        requestId : String,
+        postId: String
+    ): Boolean
+    {
+        return try {
+            val requestDoc = db.collection("request").document(requestId)
+            val updates = mapOf(
+                "postIdSolicitante" to postId,
+                "createdAt" to FieldValue.serverTimestamp()
+            )
+            requestDoc.update(updates).await()
+            true
+        } catch (e: Exception) {
+            false
+        }
+    }
+
     suspend fun getUserRequestDetails(requestId: String): UserRequestDetails? {
         val requestDoc = db.collection("request").document(requestId).get().await()
         val request = requestDoc.toObject(UserRequest::class.java) ?: return null

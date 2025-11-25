@@ -261,13 +261,18 @@ fun AppNav(navController: NavHostController = rememberNavController()) {
                 val userId = backStackEntry.arguments?.getString("userId") ?: ""
                 val nombre = backStackEntry.arguments?.getString("nombre") ?: ""
                 val requestId = backStackEntry.arguments?.getString("requestId") ?: ""
-
-                PublicationPostsScreen(
-                    userId = userId,
-                    nombre = nombre,
-                    requestId = requestId
-
-                )
+                val currentUserId = FirebaseAuthManager.currentUserId()
+                if (currentUserId != null) {
+                    PublicationPostsScreen(
+                        userId = userId,
+                        nombre = nombre,
+                        requestId = requestId,
+                        onNavigateToRequestDetails = { _ ->
+                            val route = Route.UserRequests.path.replace("{userId}", currentUserId)
+                            navController.navigate(route)
+                        }
+                    )
+                }
             }
 
             composable(Route.History.path) {

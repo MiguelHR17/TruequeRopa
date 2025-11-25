@@ -45,11 +45,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.rememberAsyncImagePainter
+import dev.miguelehr.truequeropa.model.FakeRepository.generateImageUrl
 import dev.miguelehr.truequeropa.model.ProposalStatus
 import dev.miguelehr.truequeropa.model.UserRequestDetails
 import dev.miguelehr.truequeropa.ui.viewmodels.UserRequestsViewModel
@@ -189,11 +192,13 @@ fun UserRequestItem(
                     Text("Tu prenda:", fontWeight = FontWeight.Medium)
                     Spacer(Modifier.height(4.dp))
                     Image(
-                        painter = rememberAsyncImagePainter("https://picsum.photos/seed/my1/600/800"),
+                        painter = rememberAsyncImagePainter(generateImageUrl(details.propietarioPost.categoria,2)),
                         contentDescription = details.propietarioPost.descripcion,
+                        contentScale = ContentScale.Crop,
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(140.dp)
+                            .clip(RoundedCornerShape(12.dp))
                             .background(Color.LightGray, RoundedCornerShape(12.dp))
                     )
                     Text(details.propietarioPost.titulo)
@@ -209,18 +214,24 @@ fun UserRequestItem(
                             text = "Prenda de ${details.solicitanteProfile.nombre}:",
                             fontWeight = FontWeight.Medium
                         )
-                        FilledTonalButton(onClick =  onNavigateToUserPosts ) {
-                            Text("Publicaciones")
+
+                        if (details.request.estado == "0") {
+                            FilledTonalButton(onClick = onNavigateToUserPosts) {
+                                Text("Publicaciones")
+                            }
                         }
+
                     }
 
                     Spacer(Modifier.height(4.dp))
                     Image(
-                        painter = rememberAsyncImagePainter("https://picsum.photos/seed/his4/600/800"),
+                        painter = rememberAsyncImagePainter(generateImageUrl(details.solicitantePost.categoria,1)),
                         contentDescription = details.solicitantePost.descripcion,
+                        contentScale = ContentScale.Crop,
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(140.dp)
+                            .clip(RoundedCornerShape(12.dp))
                             .background(Color.LightGray, RoundedCornerShape(12.dp))
                     )
                     Text(details.solicitantePost.titulo)

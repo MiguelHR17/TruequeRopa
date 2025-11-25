@@ -49,6 +49,10 @@ class UserRequestsViewModel : ViewModel() {
         }
     }
 
+    suspend fun updPostRequestSolicitante(requestId: String,postId: String): Int {
 
+            val success = FirestoreManager.UpdatePostSolicitante(requestId,postId)
+            return if (success) 1 else 0
+    }
 
 }
