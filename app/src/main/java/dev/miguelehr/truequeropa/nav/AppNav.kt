@@ -1,6 +1,8 @@
 package dev.miguelehr.truequeropa.nav
 
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.History
@@ -16,9 +18,13 @@ import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.runtime.*
-import androidx.compose.ui.unit.dp
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.unit.DpOffset
+import androidx.compose.ui.unit.dp
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
@@ -27,7 +33,17 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import dev.miguelehr.truequeropa.auth.FirebaseAuthManager
-import dev.miguelehr.truequeropa.ui.screens.*
+import dev.miguelehr.truequeropa.ui.screens.AdminPanelScreen
+import dev.miguelehr.truequeropa.ui.screens.AuthLoginScreen
+import dev.miguelehr.truequeropa.ui.screens.AuthRegisterScreen
+import dev.miguelehr.truequeropa.ui.screens.OffersScreen
+import dev.miguelehr.truequeropa.ui.screens.ProductFormScreen
+import dev.miguelehr.truequeropa.ui.screens.ProfileScreen
+import dev.miguelehr.truequeropa.ui.screens.ProposalsInboxScreen
+import dev.miguelehr.truequeropa.ui.screens.ProposeTradeScreen
+import dev.miguelehr.truequeropa.ui.screens.PublicationPostsScreen
+import dev.miguelehr.truequeropa.ui.screens.TradeHistoryScreen
+import dev.miguelehr.truequeropa.ui.screens.UserRequestsScreen
 
 /** Rutas de la app */
 sealed class Route(val path: String) {
@@ -80,7 +96,6 @@ fun AppNav(navController: NavHostController = rememberNavController()) {
     val bottomItems = listOf(
         BottomItem(Route.Offers.path, "Ofertas", Icons.Default.Store),
         BottomItem(Route.NewProduct.path, "Publicar", Icons.Default.Add),
-        // BottomItem(Route.Proposals.path, "PropuestasX", Icons.Default.Inbox),
         BottomItem(Route.UserRequests.path, "Propuestas", Icons.Default.Inbox),
         BottomItem(Route.History.path, "Historial", Icons.Default.History),
         BottomItem(Route.Profile.path, "Cuenta", Icons.Default.Person),
@@ -201,6 +216,7 @@ fun AppNav(navController: NavHostController = rememberNavController()) {
                     padding = padding
                 )
             }
+
             composable(Route.Register.path) {
                 AuthRegisterScreen(
                     onRegistered = {
@@ -221,25 +237,25 @@ fun AppNav(navController: NavHostController = rememberNavController()) {
 
             // ===== HOME =====
             composable(Route.Offers.path) {
-                // La propia OffersScreen maneja búsqueda de productos/personas.
                 OffersScreen(
                     onOpenProduct = { productId, ownerUserId ->
                         // Ir al perfil del dueño y fijar esa publicación arriba
                         navController.navigate(Route.ProfileById.with(ownerUserId, pin = productId))
                     },
-                    onOpenUserSearch = { /* callback por compatibilidad */ },
+                    onOpenUserSearch = { /* callback por compatibilidad si lo necesitas */ },
                     padding = padding
                 )
             }
 
-            // Propuestas (con badge)
+            // Bandeja de propuestas (si la usas)
             composable(Route.Proposals.path) {
                 ProposalsInboxScreen(
                     padding = padding,
-                    onUnreviewedCountChange = { proposalsBadge = it } // actualiza el badge del menú
+                    onUnreviewedCountChange = { proposalsBadge = it }
                 )
             }
 
+            // Solicitudes que le han hecho al usuario actual
             composable(Route.UserRequests.path) {
                 val currentUserId = FirebaseAuthManager.currentUserId()
                 if (currentUserId != null) {
@@ -247,9 +263,9 @@ fun AppNav(navController: NavHostController = rememberNavController()) {
                         userId = currentUserId,
                         padding = padding,
                         onUnreviewedCountChange = { requestsBadge = it },
-                        onNavigateToUserPosts = { solicitanteId, solicitanteNombre, requestId ->
+                        onNavigateToUserPosts = { solicitanteId, postIdSol, requestId ->
                             val route = Route.UserPostsRequests.path
-                                .replace("{userId}", userId)
+                                .replace("{userId}", solicitanteId)
                                 .replace("{postIdSol}", postIdSol)
                                 .replace("{requestId}", requestId)
                             navController.navigate(route)
@@ -258,29 +274,26 @@ fun AppNav(navController: NavHostController = rememberNavController()) {
                 }
             }
 
+            // Pantalla que muestra publicaciones del solicitante para responder a una solicitud
             composable(Route.UserPostsRequests.path) { backStackEntry ->
                 val userId = backStackEntry.arguments?.getString("userId") ?: ""
                 val postIdSol = backStackEntry.arguments?.getString("postIdSol") ?: ""
                 val requestId = backStackEntry.arguments?.getString("requestId") ?: ""
                 val currentUserId = FirebaseAuthManager.currentUserId()
+
                 if (currentUserId != null) {
                     PublicationPostsScreen(
                         userId = userId,
                         postIdSol = postIdSol,
                         requestId = requestId,
-                        onNavigateToRequestDetails = { _ ->
-                            val route = Route.UserRequests.path.replace("{userId}", currentUserId)
-                            navController.navigate(route)
+                        onNavigateToRequestDetails = {
+                            navController.navigate(Route.UserRequests.path)
                         },
                         onBack = {
                             navController.popBackStack()
                         }
-
-                PublicationPostsScreen(
-                    userId = userId,
-                    nombre = nombre,
-                    requestId = requestId
-                )
+                    )
+                }
             }
 
             composable(Route.History.path) {
@@ -301,6 +314,7 @@ fun AppNav(navController: NavHostController = rememberNavController()) {
                     padding = padding
                 )
             }
+
             // Perfil ajeno con pin opcional
             composable(
                 route = Route.ProfileById.path,
