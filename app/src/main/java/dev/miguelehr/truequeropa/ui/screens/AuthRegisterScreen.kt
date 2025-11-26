@@ -13,6 +13,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.getValue
@@ -33,6 +34,7 @@ import dev.miguelehr.truequeropa.data.FirestoreManager
 @Composable
 fun AuthRegisterScreen(
     onRegistered: () -> Unit,
+    onBackToLogin: () -> Unit,      // 👈 nuevo callback
     padding: PaddingValues
 ) {
     val focus = LocalFocusManager.current
@@ -45,12 +47,16 @@ fun AuthRegisterScreen(
     var loading by rememberSaveable { mutableStateOf(false) }
     var errorMsg by rememberSaveable { mutableStateOf<String?>(null) }
 
-    // Validaciones
-    val emailOk = EMAIL_REGEX.matches(email)
-    val passOk = pass.length >= 6
-    val confirmOk = confirm == pass
+    // ---------- Validaciones ----------
     val nombreOk = nombre.length >= 3
-    val formOk = emailOk && passOk && confirmOk && nombreOk && !loading
+    val emailOk = EMAIL_REGEX.matches(email)
+
+    // ✅ Regla: mínimo 8 caracteres, con letras y números
+    val passOk = isValidPassword(pass)
+
+    val confirmOk = confirm == pass && pass.isNotEmpty()
+
+    val formOk = nombreOk && emailOk && passOk && confirmOk && !loading
 
     Column(
         modifier = Modifier
@@ -69,7 +75,11 @@ fun AuthRegisterScreen(
             label = { Text("Nombre completo") },
             singleLine = true,
             isError = nombre.isNotEmpty() && !nombreOk,
-            supportingText = { if (nombre.isNotEmpty() && !nombreOk) Text("Mínimo 3 caracteres") },
+            supportingText = {
+                if (nombre.isNotEmpty() && !nombreOk) {
+                    Text("Mínimo 3 caracteres")
+                }
+            },
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
             modifier = Modifier.fillMaxWidth()
         )
@@ -83,7 +93,11 @@ fun AuthRegisterScreen(
             label = { Text("Correo") },
             singleLine = true,
             isError = email.isNotEmpty() && !emailOk,
-            supportingText = { if (email.isNotEmpty() && !emailOk) Text("Correo inválido") },
+            supportingText = {
+                if (email.isNotEmpty() && !emailOk) {
+                    Text("Correo inválido")
+                }
+            },
             keyboardOptions = KeyboardOptions(
                 keyboardType = KeyboardType.Email,
                 imeAction = ImeAction.Next
@@ -96,12 +110,23 @@ fun AuthRegisterScreen(
         // Contraseña
         OutlinedTextField(
             value = pass,
-            onValueChange = { pass = it },
+            onValueChange = {
+                pass = it
+                errorMsg = null
+            },
             label = { Text("Contraseña") },
             singleLine = true,
             isError = pass.isNotEmpty() && !passOk,
-            supportingText = { if (pass.isNotEmpty() && !passOk) Text("Mínimo 6 caracteres") },
-            visualTransformation = if (passVisible) VisualTransformation.None else PasswordVisualTransformation(),
+            supportingText = {
+                if (pass.isNotEmpty() && !passOk) {
+                    Text("Debe tener al menos 8 caracteres e incluir letras y números.")
+                }
+            },
+            visualTransformation = if (passVisible) {
+                VisualTransformation.None
+            } else {
+                PasswordVisualTransformation()
+            },
             trailingIcon = {
                 IconButton(onClick = { passVisible = !passVisible }) {
                     Icon(
@@ -126,8 +151,16 @@ fun AuthRegisterScreen(
             label = { Text("Confirmar contraseña") },
             singleLine = true,
             isError = confirm.isNotEmpty() && !confirmOk,
-            supportingText = { if (confirm.isNotEmpty() && !confirmOk) Text("Las contraseñas no coinciden") },
-            visualTransformation = if (passVisible) VisualTransformation.None else PasswordVisualTransformation(),
+            supportingText = {
+                if (confirm.isNotEmpty() && !confirmOk) {
+                    Text("Las contraseñas no coinciden")
+                }
+            },
+            visualTransformation = if (passVisible) {
+                VisualTransformation.None
+            } else {
+                PasswordVisualTransformation()
+            },
             keyboardOptions = KeyboardOptions(
                 keyboardType = KeyboardType.Password,
                 imeAction = ImeAction.Done
@@ -135,20 +168,22 @@ fun AuthRegisterScreen(
             keyboardActions = KeyboardActions(
                 onDone = {
                     focus.clearFocus()
-                    if (formOk) doRegister(
-                        nombre = nombre,
-                        email = email,
-                        pass = pass,
-                        setLoading = { loading = it },
-                        setError = { errorMsg = it },
-                        onRegistered = onRegistered
-                    )
+                    if (formOk) {
+                        doRegister(
+                            nombre = nombre,
+                            email = email,
+                            pass = pass,
+                            setLoading = { loading = it },
+                            setError = { errorMsg = it },
+                            onRegistered = onRegistered
+                        )
+                    }
                 }
             ),
             modifier = Modifier.fillMaxWidth()
         )
 
-        // Error
+        // Error general
         errorMsg?.let {
             Spacer(Modifier.height(8.dp))
             Text(it, color = MaterialTheme.colorScheme.error)
@@ -156,7 +191,7 @@ fun AuthRegisterScreen(
 
         Spacer(Modifier.height(20.dp))
 
-        // Botón
+        // Botón registrarse
         Button(
             onClick = {
                 focus.clearFocus()
@@ -173,18 +208,41 @@ fun AuthRegisterScreen(
             modifier = Modifier.fillMaxWidth()
         ) {
             if (loading) {
-                CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(18.dp))
+                CircularProgressIndicator(
+                    strokeWidth = 2.dp,
+                    modifier = Modifier.size(18.dp)
+                )
                 Spacer(Modifier.width(8.dp))
                 Text("Creando cuenta…")
             } else {
                 Text("Registrarme")
             }
         }
+
+        Spacer(Modifier.height(12.dp))
+
+        // 👇 Enlace para volver al login
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text("¿Ya tienes cuenta?")
+            TextButton(onClick = onBackToLogin) {
+                Text("Inicia sesión")
+            }
+        }
     }
 }
 
 // ---------- Helpers ----------
-private val EMAIL_REGEX = Regex("^[A-Za-z0-9+_.-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$")
+
+private val EMAIL_REGEX =
+    Regex("^[A-Za-z0-9+_.-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$")
+
+private fun isValidPassword(password: String): Boolean {
+    val regex = Regex("^(?=.*[A-Za-z])(?=.*\\d)[A-Za-z\\d]{8,}$")
+    return regex.matches(password)
+}
 
 private fun doRegister(
     nombre: String,
@@ -200,11 +258,9 @@ private fun doRegister(
     FirebaseAuthManager.register(email, pass) { res: FirebaseAuthManager.Result ->
         when (res) {
             is FirebaseAuthManager.Result.Success -> {
-                // Crear perfil básico en Firestore
                 val uid = FirebaseAuthManager.currentUserId() ?: ""
                 FirestoreManager.createUserProfile(uid, nombre, email) { ok, err ->
                     if (ok) {
-                        // Mantener mock actualizado para las pantallas que usan FakeRepository
                         FirebaseMockLinker.syncCurrentUserIntoMock()
                         setLoading(false)
                         onRegistered()
@@ -214,6 +270,7 @@ private fun doRegister(
                     }
                 }
             }
+
             is FirebaseAuthManager.Result.Error -> {
                 setLoading(false)
                 setError(res.message ?: "Error al registrarse")

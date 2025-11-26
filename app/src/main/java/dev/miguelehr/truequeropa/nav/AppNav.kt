@@ -80,7 +80,7 @@ fun AppNav(navController: NavHostController = rememberNavController()) {
     val bottomItems = listOf(
         BottomItem(Route.Offers.path, "Ofertas", Icons.Default.Store),
         BottomItem(Route.NewProduct.path, "Publicar", Icons.Default.Add),
-      //  BottomItem(Route.Proposals.path, "PropuestasX", Icons.Default.Inbox),
+        // BottomItem(Route.Proposals.path, "PropuestasX", Icons.Default.Inbox),
         BottomItem(Route.UserRequests.path, "Propuestas", Icons.Default.Inbox),
         BottomItem(Route.History.path, "Historial", Icons.Default.History),
         BottomItem(Route.Profile.path, "Cuenta", Icons.Default.Person),
@@ -91,7 +91,6 @@ fun AppNav(navController: NavHostController = rememberNavController()) {
     var showAccountMenu by remember { mutableStateOf(false) }
     var proposalsBadge by remember { mutableStateOf(0) }
     var requestsBadge by remember { mutableStateOf(0) }
-
 
     Scaffold(
         bottomBar = {
@@ -205,11 +204,16 @@ fun AppNav(navController: NavHostController = rememberNavController()) {
             composable(Route.Register.path) {
                 AuthRegisterScreen(
                     onRegistered = {
+                        // Después de registrarse, lo mandas al login
                         FirebaseAuthManager.signOut()
                         navController.navigate(Route.Login.path) {
                             popUpTo(Route.Login.path) { inclusive = true }
                             launchSingleTop = true
                         }
+                    },
+                    onBackToLogin = {
+                        // Aquí vuelves al login cuando toque "¿Ya tienes cuenta? Inicia sesión"
+                        navController.popBackStack()
                     },
                     padding = padding
                 )
@@ -223,7 +227,7 @@ fun AppNav(navController: NavHostController = rememberNavController()) {
                         // Ir al perfil del dueño y fijar esa publicación arriba
                         navController.navigate(Route.ProfileById.with(ownerUserId, pin = productId))
                     },
-                    onOpenUserSearch = { /* ya buscamos dentro de Offers; mantenemos el callback por compatibilidad */ },
+                    onOpenUserSearch = { /* callback por compatibilidad */ },
                     padding = padding
                 )
             }
@@ -237,27 +241,24 @@ fun AppNav(navController: NavHostController = rememberNavController()) {
             }
 
             composable(Route.UserRequests.path) {
-                //val currentUserId = FirebaseAuthManager.getCurrentUser()?.uid
                 val currentUserId = FirebaseAuthManager.currentUserId()
                 if (currentUserId != null) {
                     UserRequestsScreen(
                         userId = currentUserId,
                         padding = padding,
                         onUnreviewedCountChange = { requestsBadge = it },
-                        onNavigateToUserPosts = { userId, postIdSol, requestId ->
-                            // 2. Aquí, la NAVEGACIÓN TOMA el ID del botón
+                        onNavigateToUserPosts = { solicitanteId, solicitanteNombre, requestId ->
                             val route = Route.UserPostsRequests.path
                                 .replace("{userId}", userId)
                                 .replace("{postIdSol}", postIdSol)
                                 .replace("{requestId}", requestId)
                             navController.navigate(route)
                         }
-
                     )
                 }
             }
 
-            composable(Route.UserPostsRequests.path) {  backStackEntry ->
+            composable(Route.UserPostsRequests.path) { backStackEntry ->
                 val userId = backStackEntry.arguments?.getString("userId") ?: ""
                 val postIdSol = backStackEntry.arguments?.getString("postIdSol") ?: ""
                 val requestId = backStackEntry.arguments?.getString("requestId") ?: ""
@@ -275,8 +276,11 @@ fun AppNav(navController: NavHostController = rememberNavController()) {
                             navController.popBackStack()
                         }
 
-                    )
-                }
+                PublicationPostsScreen(
+                    userId = userId,
+                    nombre = nombre,
+                    requestId = requestId
+                )
             }
 
             composable(Route.History.path) {
@@ -293,7 +297,7 @@ fun AppNav(navController: NavHostController = rememberNavController()) {
                     userId = null,              // null => actual
                     pinProductId = null,        // sin publicación fijada
                     onPublish = { navController.navigate(Route.NewProduct.path) },
-                    onOpenProduct = { /* Si quisieras abrir un detalle, aquí */ },
+                    onOpenProduct = { /* Detalle interno si quisieras */ },
                     padding = padding
                 )
             }
@@ -334,14 +338,8 @@ fun AppNav(navController: NavHostController = rememberNavController()) {
             composable(Route.NewProduct.path) {
                 ProductFormScreen(
                     onSaved = {
-                        // aquí decide qué quieres hacer tras guardar:
-                        // 1) Volver a Ofertas:
-                        // navController.navigate(Route.Offers.path) {
-                        //     popUpTo(Route.Offers.path) { inclusive = true }
-                        //     launchSingleTop = true
-                        // }
-
-                        // 2) O simplemente mostrar un snackbar (si lo implementas ahí)
+                        // Después de publicar, puedes volver al perfil o a ofertas.
+                        navController.popBackStack()
                     },
                     padding = padding
                 )
