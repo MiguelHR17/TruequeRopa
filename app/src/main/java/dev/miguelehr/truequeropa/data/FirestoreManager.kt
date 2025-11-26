@@ -46,6 +46,7 @@ object FirestoreManager {
         talla: String,
         estado: String,
         imageUrls: List<String>,
+        estadoTrueque: String,
         onComplete: (Boolean, String?) -> Unit
     ) {
         val data = hashMapOf(
@@ -57,6 +58,7 @@ object FirestoreManager {
             "talla" to talla,
             "estado" to estado,
             "imageUrls" to imageUrls,
+            "estadoTrueque" to estadoTrueque,
             "createdAt" to FieldValue.serverTimestamp()
         )
 
@@ -90,6 +92,7 @@ object FirestoreManager {
                         categoria = doc.getString("categoria") ?: "",
                         talla = doc.getString("talla") ?: "",
                         estado = doc.getString("estado") ?: "",
+                        estadoTrueque = doc.getString("estadoTrueque")?: "0",
                         imageUrls = (doc.get("imageUrls") as? List<*>)?.filterIsInstance<String>()
                             ?: emptyList(),
                         createdAt = doc.getTimestamp("createdAt")
@@ -155,6 +158,51 @@ object FirestoreManager {
         requestDoc.update(updates).await()
     }
 
+    suspend fun UpdatePostSolicitante(
+        requestId : String,
+        postId: String
+    ): Boolean
+    {
+        return try {
+            val requestDoc = db.collection("request").document(requestId)
+            val updates = mapOf(
+                "postIdSolicitante" to postId,
+                "createdAt" to FieldValue.serverTimestamp()
+            )
+            requestDoc.update(updates).await()
+            true
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    suspend fun UpdatePost(
+        postId: String,
+        postValue: String
+    ): Boolean
+    {
+        return try {
+            val postDoc = db.collection("posts").document(postId)
+
+            val updates = mapOf(
+                "estadoTrueque" to postValue,
+            )
+            postDoc.update(updates).await()
+            true
+        } catch (e: Exception) {
+            Log.e("update", "Error al obtener las solicitudes de usuario", e)
+            false
+        }
+    }
+
+    suspend fun getUser(uid: String): UserProfile? {
+
+        val propietarioProfileDoc = db.collection("users").document(uid).get().await()
+        val propietarioProfile = propietarioProfileDoc.toObject(UserProfile::class.java) ?: return null
+
+        return propietarioProfile
+    }
+
     suspend fun getUserRequestDetails(requestId: String): UserRequestDetails? {
         val requestDoc = db.collection("request").document(requestId).get().await()
         val request = requestDoc.toObject(UserRequest::class.java) ?: return null
@@ -163,28 +211,29 @@ object FirestoreManager {
 
         val propietarioPostDoc = db.collection("posts").document(request.postIdPropietario).get().await()
         val propietarioPost = propietarioPostDoc.toObject(UserPost::class.java) ?: return null
+        val propietarioPostWithId = propietarioPost.copy(id = propietarioPostDoc.id)
 
         val solicitantePostDoc = db.collection("posts").document(request.postIdSolicitante).get().await()
         val solicitantePost = solicitantePostDoc.toObject(UserPost::class.java) ?: return null
+        val solicitantePostWithId = solicitantePost.copy(id = solicitantePostDoc.id)
+
+        val solicitanteProfileDoc = db.collection("users").document(solicitantePost.userId).get().await()
+        val solicitanteProfile = solicitanteProfileDoc.toObject(UserProfile::class.java) ?: return null
 
         val propietarioProfileDoc = db.collection("users").document(propietarioPost.userId).get().await()
         val propietarioProfile = propietarioProfileDoc.toObject(UserProfile::class.java) ?: return null
 
-        val solicitanteProfileDoc = db.collection("users").document(solicitantePost.userId).get().await()
-        val solicitanteProfile = solicitanteProfileDoc.toObject(UserProfile::class.java) ?: return null
 
         return UserRequestDetails(
             requestWithId,
             propietarioProfile,
             solicitanteProfile,
-            propietarioPost,
-            solicitantePost
+            propietarioPostWithId,
+            solicitantePostWithId
         )
     }
 
-    suspend fun getAllUserRequestDetailsForUser(userId: String): List<UserRequestDetails> {
-        val TAG = "FirestoreManager"
-        Log.d(TAG, "Buscando solicitudes para el userId: $userId")
+    suspend fun getAllUserRequestDetailsForUser(userId: String,report: Int): List<UserRequestDetails> {
 
         val requests = mutableListOf<UserRequestDetails>()
         val processedRequestIds = mutableSetOf<String>() // Para evitar duplicados
@@ -199,7 +248,6 @@ object FirestoreManager {
             val userPostIds = userPostsSnapshot.documents.map { it.id }
 
             if (userPostIds.isEmpty()) {
-                Log.d(TAG, "El usuario $userId no tiene posts, no se pueden encontrar solicitudes.")
                 return emptyList()
             }
 
@@ -209,43 +257,36 @@ object FirestoreManager {
                 .get()
                 .await()
 
-            Log.d(TAG, "Encontradas ${requestsAsOwnerSnapshot.size()} solicitudes como propietario.")
-
             for (document in requestsAsOwnerSnapshot.documents) {
                 if (processedRequestIds.add(document.id)) { // Añade si no existe
                     val details = getUserRequestDetails(document.id)
                     if (details != null) {
                         requests.add(details)
-                    } else {
-                        Log.w(TAG, "No se pudieron obtener detalles para la solicitud (como propietario): ${document.id}")
                     }
                 }
             }
 
             // --- Consulta 2: Solicitudes donde el usuario es el SOLICITANTE de la prenda ---
-            val requestsAsRequesterSnapshot = db.collection("request")
-                .whereIn("postIdSolicitante", userPostIds)
-                .get()
-                .await()
+            if(report == 1) {
+                val requestsAsRequesterSnapshot = db.collection("request")
+                    .whereIn("postIdSolicitante", userPostIds)
+                    .get()
+                    .await()
 
-            Log.d(TAG, "Encontradas ${requestsAsRequesterSnapshot.size()} solicitudes como solicitante.")
-
-            for (document in requestsAsRequesterSnapshot.documents) {
-                if (processedRequestIds.add(document.id)) { // Añade si no existe
-                    val details = getUserRequestDetails(document.id)
-                    if (details != null) {
-                        requests.add(details)
-                    } else {
-                        Log.w(TAG, "No se pudieron obtener detalles para la solicitud (como solicitante): ${document.id}")
+                for (document in requestsAsRequesterSnapshot.documents) {
+                    if (processedRequestIds.add(document.id)) { // Añade si no existe
+                        val details = getUserRequestDetails(document.id)
+                        if (details != null) {
+                            requests.add(details)
+                        }
                     }
                 }
             }
 
         } catch (e: Exception) {
-            Log.e(TAG, "Error al obtener las solicitudes de usuario", e)
+            //Log.e(TAG, "Error al obtener las solicitudes de usuario", e)
         }
 
-        Log.d(TAG, "Retornando ${requests.size} solicitudes detalladas en total.")
         return requests.sortedByDescending { it.request.createdAt } // Opcional: ordenar por fecha
     }
 
@@ -256,19 +297,12 @@ object FirestoreManager {
 
         val postsWithId = solicitantePost.copy(id = solicitantePostDoc.id)
 
-
-        val solicitanteProfileDoc = db.collection("users").document(solicitantePost.userId).get().await()
-        val solicitanteProfile = solicitanteProfileDoc.toObject(UserProfile::class.java) ?: return null
-
         return UserPostsDetails(
-            solicitanteProfile,
             postsWithId
         )
     }
 
     suspend fun getAllUserPostDetailsForUser(userId: String): List<UserPostsDetails> {
-        val TAG = "FirestoreManager"
-        Log.d(TAG, "Buscando prendas para el userId: $userId")
 
         val posts = mutableListOf<UserPostsDetails>()
         val processedPostsIds = mutableSetOf<String>() // Para evitar duplicados
@@ -277,13 +311,13 @@ object FirestoreManager {
             // Primero, obtenemos todos los posts del usuario.
             val userPostsSnapshot = db.collection("posts")
                 .whereEqualTo("userId", userId)
+                .whereEqualTo("estadoTrueque", "0")
                 .get()
                 .await()
 
             val userPostIds = userPostsSnapshot.documents.map { it.id }
 
             if (userPostIds.isEmpty()) {
-                Log.d(TAG, "El usuario $userId no tiene posts, no se pueden encontrar solicitudes.")
                 return emptyList()
             }
 
@@ -292,14 +326,12 @@ object FirestoreManager {
                     val details = getUserPostDetails(document.id)
                     if (details != null) {
                         posts.add(details)
-                    } else {
-                        Log.w(TAG, "No se pudieron obtener detalles para la solicitud (como propietario): ${document.id}")
                     }
                 }
             }
 
         } catch (e: Exception) {
-            Log.e(TAG, "Error al obtener las solicitudes de usuario", e)
+           // Log.e(TAG, "Error al obtener las solicitudes de usuario", e)
         }
 
         return posts.sortedByDescending { it.solicitantePost.createdAt } // .sortedByDescending { it.request.createdAt }
