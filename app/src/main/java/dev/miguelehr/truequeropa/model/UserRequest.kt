@@ -23,6 +23,5 @@ data class UserRequestDetails(
 )
 
 data class UserPostsDetails(
-    val solicitanteProfile: UserProfile,
     val solicitantePost: UserPost
 )

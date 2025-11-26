@@ -40,7 +40,7 @@ sealed class Route(val path: String) {
     data object NewProduct : Route("home/new")
     data object Proposals : Route("home/proposals")
     data object UserRequests : Route("home/requests")
-    data object UserPostsRequests : Route("publicationPosts/{userId}/{nombre}/{requestId}")
+    data object UserPostsRequests : Route("publicationPosts/{userId}/{postIdSol}/{requestId}")
     data object History : Route("home/history")
 
     // Perfil propio
@@ -249,8 +249,8 @@ fun AppNav(navController: NavHostController = rememberNavController()) {
                         onUnreviewedCountChange = { requestsBadge = it },
                         onNavigateToUserPosts = { solicitanteId, solicitanteNombre, requestId ->
                             val route = Route.UserPostsRequests.path
-                                .replace("{userId}", solicitanteId)
-                                .replace("{nombre}", solicitanteNombre)
+                                .replace("{userId}", userId)
+                                .replace("{postIdSol}", postIdSol)
                                 .replace("{requestId}", requestId)
                             navController.navigate(route)
                         }
@@ -260,8 +260,21 @@ fun AppNav(navController: NavHostController = rememberNavController()) {
 
             composable(Route.UserPostsRequests.path) { backStackEntry ->
                 val userId = backStackEntry.arguments?.getString("userId") ?: ""
-                val nombre = backStackEntry.arguments?.getString("nombre") ?: ""
+                val postIdSol = backStackEntry.arguments?.getString("postIdSol") ?: ""
                 val requestId = backStackEntry.arguments?.getString("requestId") ?: ""
+                val currentUserId = FirebaseAuthManager.currentUserId()
+                if (currentUserId != null) {
+                    PublicationPostsScreen(
+                        userId = userId,
+                        postIdSol = postIdSol,
+                        requestId = requestId,
+                        onNavigateToRequestDetails = { _ ->
+                            val route = Route.UserRequests.path.replace("{userId}", currentUserId)
+                            navController.navigate(route)
+                        },
+                        onBack = {
+                            navController.popBackStack()
+                        }
 
                 PublicationPostsScreen(
                     userId = userId,
@@ -271,7 +284,10 @@ fun AppNav(navController: NavHostController = rememberNavController()) {
             }
 
             composable(Route.History.path) {
-                TradeHistoryScreen(padding)
+                val currentUserId = FirebaseAuthManager.currentUserId()
+                if (currentUserId != null) {
+                    TradeHistoryScreen(userId = currentUserId)
+                }
             }
 
             // ===== PERFIL =====

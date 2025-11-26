@@ -52,4 +52,20 @@ object FakeRepository {
         categoriasTop = listOf(Category.CAMISA to 18, Category.PANTALON to 12, Category.VESTIDO to 9),
         usuariosTop = listOf("Andrea" to 10, "Marco" to 8, "Miguel" to 7)
     )
+
+     fun generateImageUrl(category: String, index: Int): String {
+        // Convertimos la categoría del Enum a un String legible para la URL (ej: CAMISA -> "shirt")
+        val categoryForUrl = when (category) {
+            "CAMISA" -> "shirt"
+            "PANTALON" -> "pants"
+            "VESTIDO" -> "dress"
+            "CHAQUETA" -> "jacket"
+            "ZAPATOS" -> "shoe"
+            "USUARIO" -> "owner"
+            else -> "clothes"
+        }
+        // Construimos y devolvemos la URL completa
+        return "https://placeholdxr.com/api/image/$categoryForUrl?index=$index"
+    }
+
 }

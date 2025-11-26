@@ -12,5 +12,6 @@ data class UserPost(
     val talla: String = "",         // igual: Size.M -> "M"
     val estado: String = "",        // Condition.USADO -> "USADO"
     val imageUrls: List<String> = emptyList(),
+    val estadoTrueque: String = "0",
     val createdAt: Timestamp? = null
 )

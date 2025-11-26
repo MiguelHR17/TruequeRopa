@@ -42,18 +42,23 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.rememberAsyncImagePainter
+import dev.miguelehr.truequeropa.model.FakeRepository.generateImageUrl
 import dev.miguelehr.truequeropa.model.ProposalStatus
+import dev.miguelehr.truequeropa.model.UserProfile
 import dev.miguelehr.truequeropa.model.UserRequestDetails
 import dev.miguelehr.truequeropa.ui.viewmodels.UserRequestsViewModel
-
+import kotlinx.coroutines.launch
 
 
 @Composable
@@ -64,9 +69,13 @@ fun UserRequestsScreen(
     onUnreviewedCountChange: (Int) -> Unit = {},
     onNavigateToUserPosts: (String, String, String) -> Unit
 ) {
-    viewModel.fetchUserRequests(userId)
+    LaunchedEffect(userId) {
+        viewModel.fetchUserRequests(userId, 0)
+    }
+
     val userRequests by viewModel.userRequests.collectAsState()
     var expandedIds by remember { mutableStateOf(setOf<Int>()) }
+    val scope = rememberCoroutineScope()
 
     LaunchedEffect(userRequests) {
        onUnreviewedCountChange(userRequests.count())
@@ -91,8 +100,6 @@ fun UserRequestsScreen(
             )
         }
 
-        //items(userRequests ) {
-
         itemsIndexed(userRequests, key = { index, _ -> index }) { index, details ->
             val isExpanded = index in expandedIds
                 UserRequestItem(
@@ -107,19 +114,34 @@ fun UserRequestsScreen(
                     },
 
                     onAccept = {
-                        viewModel.acceptRequest(details.request.id,details.propietarioProfile.uid) // Asumiendo que ahora tienes 'solicitudId'
 
+                        scope.launch {
+
+                            viewModel.acceptRequest(
+                                details.request.id,
+                                details.propietarioProfile.uid
+                            )
+                            viewModel.fetchUserRequests(userId, 0)
+                        }
                         // Colapsa la tarjeta después de la acción
                         expandedIds = expandedIds - index
                     },
                     onReject = {
-                        viewModel.rejectRequest(details.request.id,details.propietarioProfile.uid) // Asumiendo que ahora tienes 'solicitudId'
+
+                            scope.launch {
+                                viewModel.updPost(details.propietarioPost.id, "0")
+                                viewModel.updPost(details.solicitantePost.id, "0")
+                                viewModel.rejectRequest(details.request.id, details.propietarioProfile.uid)
+                                viewModel.fetchUserRequests(userId, 0)
+                            }
+
+
 
                         // Colapsa la tarjeta después de la acción
                         expandedIds = expandedIds - index
                     },
                     onNavigateToUserPosts = {
-                        onNavigateToUserPosts(details.solicitanteProfile.uid,details.solicitanteProfile.nombre,details.request.id.toString())
+                        onNavigateToUserPosts(details.solicitanteProfile.uid,details.solicitantePost.id.toString(),details.request.id.toString())
                     }
                 )
         }
@@ -189,11 +211,13 @@ fun UserRequestItem(
                     Text("Tu prenda:", fontWeight = FontWeight.Medium)
                     Spacer(Modifier.height(4.dp))
                     Image(
-                        painter = rememberAsyncImagePainter("https://picsum.photos/seed/my1/600/800"),
+                        painter = rememberAsyncImagePainter(generateImageUrl(details.propietarioPost.categoria,2)),
                         contentDescription = details.propietarioPost.descripcion,
+                        contentScale = ContentScale.Crop,
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(140.dp)
+                            .clip(RoundedCornerShape(12.dp))
                             .background(Color.LightGray, RoundedCornerShape(12.dp))
                     )
                     Text(details.propietarioPost.titulo)
@@ -209,18 +233,24 @@ fun UserRequestItem(
                             text = "Prenda de ${details.solicitanteProfile.nombre}:",
                             fontWeight = FontWeight.Medium
                         )
-                        FilledTonalButton(onClick =  onNavigateToUserPosts ) {
-                            Text("Publicaciones")
+
+                        if (details.request.estado == "0") {
+                            FilledTonalButton(onClick = onNavigateToUserPosts) {
+                                Text("Publicaciones")
+                            }
                         }
+
                     }
 
                     Spacer(Modifier.height(4.dp))
                     Image(
-                        painter = rememberAsyncImagePainter("https://picsum.photos/seed/his4/600/800"),
+                        painter = rememberAsyncImagePainter(generateImageUrl(details.solicitantePost.categoria,1)),
                         contentDescription = details.solicitantePost.descripcion,
+                        contentScale = ContentScale.Crop,
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(140.dp)
+                            .clip(RoundedCornerShape(12.dp))
                             .background(Color.LightGray, RoundedCornerShape(12.dp))
                     )
                     Text(details.solicitantePost.titulo)
