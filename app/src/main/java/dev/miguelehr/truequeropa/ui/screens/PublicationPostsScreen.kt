@@ -49,22 +49,30 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.rememberAsyncImagePainter
 import dev.miguelehr.truequeropa.model.FakeRepository.generateImageUrl
 import dev.miguelehr.truequeropa.model.UserPostsDetails
+import dev.miguelehr.truequeropa.model.UserProfile
 import dev.miguelehr.truequeropa.ui.viewmodels.UserRequestsViewModel
 import kotlinx.coroutines.launch
 
 @Composable
 fun PublicationPostsScreen(
     userId: String,
-    nombre:String,
+    postIdSol: String,
     requestId:String,
     onNavigateToRequestDetails: (String) -> Unit,
+    onBack: () -> Unit,
     vm: UserRequestsViewModel = viewModel()
 ) {
 
     val userPosts by vm.userPosts.collectAsState()
     var selectedPostId by remember { mutableStateOf<String?>(null) }
     var showDialogForPost by remember { mutableStateOf<String?>(null) }
+    var userSolicitante by remember { mutableStateOf<UserProfile?>(null) }
     val scope = rememberCoroutineScope()
+
+    LaunchedEffect(userId) {
+        userSolicitante = vm.selUser(userId)
+    }
+
     showDialogForPost?.let { postId ->
         AlertDialog(
             onDismissRequest = {
@@ -77,10 +85,13 @@ fun PublicationPostsScreen(
                     onClick = {
 
                         scope.launch {
-                            val resultado = vm.updPostRequestSolicitante (requestId, postId)
+                            vm.updPost(postIdSol, "0")
+                            vm.updPostRequestSolicitante (requestId, postId)
+                            vm.updPost(postId, "1")
+                             //onNavigateToRequestDetails(userId)
+                            onBack()
                         }
 
-                        onNavigateToRequestDetails(userId)
                         // Cerramos el diálogo después de navegar.
                         showDialogForPost = null
                     }
@@ -93,6 +104,7 @@ fun PublicationPostsScreen(
                     onClick = {
                         // Si el usuario cancela, simplemente cerramos el diálogo.
                         showDialogForPost = null
+                        onBack()
                     }
                 ) {
                     Text("Cancelar")
@@ -111,7 +123,7 @@ fun PublicationPostsScreen(
     ) {
         Spacer(Modifier.height(24.dp))
         Text(
-            text = "Prendas de ${nombre.uppercase()}:",
+            text = "Prendas de ${userSolicitante?.nombre?.uppercase()}:",
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.Medium
         )

@@ -61,6 +61,7 @@ object FakeRepository {
             "VESTIDO" -> "dress"
             "CHAQUETA" -> "jacket"
             "ZAPATOS" -> "shoe"
+            "USUARIO" -> "owner"
             else -> "clothes"
         }
         // Construimos y devolvemos la URL completa

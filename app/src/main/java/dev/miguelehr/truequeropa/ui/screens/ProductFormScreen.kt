@@ -328,6 +328,7 @@ fun ProductFormScreen(
                     categoria = selectedCategory!!.name,
                     talla = selectedSize!!.name,
                     estado = selectedCondition.name,
+                    estadoTrueque = "0",
                     imageUrls = imageUrlStrings
                 ) { ok, err ->
                     saving = false
