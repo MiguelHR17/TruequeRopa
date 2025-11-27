@@ -56,6 +56,10 @@ import dev.miguelehr.truequeropa.model.Size
 import dev.miguelehr.truequeropa.auth.FirebaseAuthManager
 import dev.miguelehr.truequeropa.data.FirestoreManager
 import java.util.UUID
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
+import dev.miguelehr.truequeropa.data.FirebaseStorageManager
 
 @Composable
 fun ProductFormScreen(
@@ -88,6 +92,9 @@ fun ProductFormScreen(
             }
         }
     }
+
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
 
     Column(
         modifier = Modifier
@@ -313,37 +320,51 @@ fun ProductFormScreen(
                     return@Button
                 }
 
-                saving = true
-                error = null
+                scope.launch {
+                    saving = true
+                    error = null
 
-                // Por ahora guardamos las imágenes como uri.toString().
-                // Más adelante puedes reemplazar esto por URLs reales de Firebase Storage.
-                val imageUrlStrings = selectedImages.map { it.toString() }
+                    // Usamos el mismo prendaId para Storage y Firestore
+                    val prendaId = UUID.randomUUID().toString()
 
-                FirestoreManager.createUserPost(
-                    uid = uid,
-                    prendaId = UUID.randomUUID().toString(),
-                    titulo = titulo.trim(),
-                    descripcion = descripcion.trim(),
-                    categoria = selectedCategory!!.name,
-                    talla = selectedSize!!.name,
-                    estado = selectedCondition.name,
-                    estadoTrueque = "0",
-                    imageUrls = imageUrlStrings
-                ) { ok, err ->
-                    saving = false
-                    if (ok) {
-                        // Limpiar formulario
-                        titulo = ""
-                        descripcion = ""
-                        selectedCategory = null
-                        selectedSize = null
-                        selectedCondition = Condition.USADO
-                        selectedImages = emptyList()
+                    try {
+                        // 1) Subir imágenes a Storage y obtener download URLs
+                        val imageUrlStrings = FirebaseStorageManager.uploadImagesForPost(
+                            context = context,
+                            uid = uid,
+                            prendaId = prendaId,
+                            uris = selectedImages
+                        )
 
-                        onSaved() // volver al perfil, por ejemplo
-                    } else {
-                        error = err ?: "No se pudo guardar la publicación"
+                        // 2) Crear el documento en Firestore con esas URLs reales
+                        FirestoreManager.createUserPost(
+                            uid = uid,
+                            prendaId = prendaId,
+                            titulo = titulo.trim(),
+                            descripcion = descripcion.trim(),
+                            categoria = selectedCategory!!.name,
+                            talla = selectedSize!!.name,
+                            estado = selectedCondition.name,
+                            imageUrls = imageUrlStrings,
+                            estadoTrueque = "0"
+                        ) { ok, err ->
+                            saving = false
+                            if (ok) {
+                                // Limpiar formulario
+                                titulo = ""
+                                descripcion = ""
+                                selectedCategory = null
+                                selectedSize = null
+                                selectedCondition = Condition.USADO
+                                selectedImages = emptyList()
+                                onSaved()
+                            } else {
+                                error = err ?: "No se pudo guardar la publicación"
+                            }
+                        }
+                    } catch (e: Exception) {
+                        saving = false
+                        error = e.message ?: "Error al subir imágenes a la nube"
                     }
                 }
             },

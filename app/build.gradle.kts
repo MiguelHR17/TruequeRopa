@@ -72,5 +72,9 @@ dependencies {
     implementation("com.google.firebase:firebase-auth")
     implementation("com.google.firebase:firebase-firestore")
 
+    // Firebase Storage
+    implementation("com.google.firebase:firebase-storage")
+
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.8.1")
 }
     apply(plugin = "com.google.gms.google-services")
