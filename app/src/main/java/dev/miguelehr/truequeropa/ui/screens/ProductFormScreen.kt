@@ -81,6 +81,7 @@ fun ProductFormScreen(
             && descripcion.isNotBlank()
             && selectedCategory != null
             && selectedSize != null
+            && selectedImages.isNotEmpty() // ← Agregado: debe tener al menos 1 imagen
 
     // Launcher para seleccionar imágenes
     val imagePickerLauncher = rememberLauncherForActivityResult(
@@ -216,7 +217,7 @@ fun ProductFormScreen(
         )
 
         Text(
-            text = "Máximo 5 fotos",
+            text = "Máximo 5 fotos (mínimo 1)",
             style = MaterialTheme.typography.bodySmall,
             color = Color.Gray,
             modifier = Modifier.padding(bottom = 12.dp)
@@ -324,11 +325,10 @@ fun ProductFormScreen(
                     saving = true
                     error = null
 
-                    // Usamos el mismo prendaId para Storage y Firestore
                     val prendaId = UUID.randomUUID().toString()
 
                     try {
-                        // 1) Subir imágenes a Storage y obtener download URLs
+                        // 1) Subir imágenes a Storage
                         val imageUrlStrings = FirebaseStorageManager.uploadImagesForPost(
                             context = context,
                             uid = uid,
@@ -336,7 +336,7 @@ fun ProductFormScreen(
                             uris = selectedImages
                         )
 
-                        // 2) Crear el documento en Firestore con esas URLs reales
+                        // 2) Crear el documento en Firestore
                         FirestoreManager.createUserPost(
                             uid = uid,
                             prendaId = prendaId,
@@ -379,7 +379,8 @@ fun ProductFormScreen(
             if (saving) {
                 CircularProgressIndicator(
                     strokeWidth = 2.dp,
-                    modifier = Modifier.size(20.dp)
+                    modifier = Modifier.size(20.dp),
+                    color = MaterialTheme.colorScheme.onPrimary
                 )
                 Spacer(Modifier.width(8.dp))
                 Text("Publicando…")
