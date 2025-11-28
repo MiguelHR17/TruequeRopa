@@ -345,7 +345,7 @@ fun AppNav(navController: NavHostController = rememberNavController()) {
 
             // ===== ADMIN =====
             composable(Route.AdminPanel.path) {
-                AdminPanelScreen(padding)
+                AdminPanelScreen({navController.popBackStack()})
             }
 
             // === PUBLICAR ===

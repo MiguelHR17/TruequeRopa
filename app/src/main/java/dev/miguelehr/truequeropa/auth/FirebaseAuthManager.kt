@@ -2,6 +2,8 @@ package dev.miguelehr.truequeropa.auth
 
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseAuthException
+import com.google.firebase.firestore.FieldValue
+import com.google.firebase.firestore.FirebaseFirestore
 
 object FirebaseAuthManager {
 
@@ -11,12 +13,47 @@ object FirebaseAuthManager {
     }
 
     private val auth: FirebaseAuth by lazy { FirebaseAuth.getInstance() }
+    private val db: FirebaseFirestore by lazy { FirebaseFirestore.getInstance() }
 
     // --------- VALIDACIÓN DE CONTRASEÑA ---------
     private fun isValidPassword(password: String): Boolean {
         // Mínimo 8 caracteres, al menos 1 letra y 1 número
         val regex = Regex("^(?=.*[A-Za-z])(?=.*\\d)[A-Za-z\\d]{8,}$")
         return regex.matches(password)
+    }
+
+    // 🔹 Helper: aseguro que exista un perfil en /users/{uid}
+    private fun ensureUserProfile(
+        uid: String,
+        email: String?,
+        nombre: String? = null,
+        onComplete: (Boolean) -> Unit
+    ) {
+        val docRef = db.collection("users").document(uid)
+
+        docRef.get()
+            .addOnSuccessListener { snapshot ->
+                if (snapshot.exists()) {
+                    // Ya tiene perfil, no hacemos nada raro
+                    onComplete(true)
+                } else {
+                    // Crear perfil mínimo
+                    val data = hashMapOf(
+                        "uid" to uid,
+                        "email" to (email ?: ""),
+                        "nombre" to (nombre ?: ""),
+                        "active" to true,
+                        "createdAt" to FieldValue.serverTimestamp()
+                    )
+
+                    docRef.set(data)
+                        .addOnSuccessListener { onComplete(true) }
+                        .addOnFailureListener { onComplete(false) }
+                }
+            }
+            .addOnFailureListener {
+                onComplete(false)
+            }
     }
 
     // ✅ Registro con envío de correo de verificación
@@ -54,25 +91,39 @@ object FirebaseAuthManager {
                     return@addOnCompleteListener
                 }
 
-                // Cuenta creada → enviar correo de verificación
                 val user = auth.currentUser
-                user?.sendEmailVerification()
-                    ?.addOnCompleteListener { verTask ->
-                        if (verTask.isSuccessful) {
-                            // Todo OK, pero el usuario aún debe verificar el correo
-                            callback(
-                                Result.Error(
-                                    "Te hemos enviado un correo de verificación. Revisa tu bandeja y haz clic en el enlace para activar tu cuenta."
+                val uid = user?.uid
+
+                if (uid == null) {
+                    callback(Result.Error("No se pudo obtener el usuario recién creado."))
+                    return@addOnCompleteListener
+                }
+
+                // 🔹 Crear el perfil básico en Firestore
+                ensureUserProfile(
+                    uid = uid,
+                    email = user.email,
+                    nombre = user.displayName
+                ) { ok ->
+                    // Aunque falle el perfil, igual intentamos enviar el correo de verificación
+                    user.sendEmailVerification()
+                        .addOnCompleteListener { verTask ->
+                            if (verTask.isSuccessful) {
+                                // Todo OK, pero el usuario aún debe verificar el correo
+                                callback(
+                                    Result.Error(
+                                        "Te hemos enviado un correo de verificación. Revisa tu bandeja y haz clic en el enlace para activar tu cuenta."
+                                    )
                                 )
-                            )
-                        } else {
-                            callback(
-                                Result.Error(
-                                    "Cuenta creada, pero no se pudo enviar el correo de verificación. Intenta más tarde."
+                            } else {
+                                callback(
+                                    Result.Error(
+                                        "Cuenta creada, pero no se pudo enviar el correo de verificación. Intenta más tarde."
+                                    )
                                 )
-                            )
+                            }
                         }
-                    }
+                }
             }
     }
 
@@ -87,7 +138,6 @@ object FirebaseAuthManager {
                 if (!task.isSuccessful) {
                     val ex = task.exception
                     val fbEx = ex as? FirebaseAuthException
-
                     val message = when (fbEx?.errorCode) {
                         "ERROR_WRONG_PASSWORD" ->
                             "Contraseña incorrecta."
@@ -98,7 +148,6 @@ object FirebaseAuthManager {
                         else ->
                             ex?.localizedMessage ?: "No se pudo iniciar sesión. Inténtalo de nuevo."
                     }
-
                     callback(Result.Error(message))
                     return@addOnCompleteListener
                 }
@@ -112,8 +161,56 @@ object FirebaseAuthManager {
                             "Tu correo aún no está verificado. Revisa tu bandeja y haz clic en el enlace de verificación."
                         )
                     )
-                } else {
-                    callback(Result.Success)
+                    return@addOnCompleteListener
+                }
+
+                val uid = user?.uid
+                if (uid == null) {
+                    auth.signOut()
+                    callback(Result.Error("No se pudo obtener la información del usuario."))
+                    return@addOnCompleteListener
+                }
+
+                // 🔹 Primero nos aseguramos de que exista el perfil en /users
+                ensureUserProfile(
+                    uid = uid,
+                    email = user.email,
+                    nombre = user.displayName
+                ) { ok ->
+                    if (!ok) {
+                        auth.signOut()
+                        callback(
+                            Result.Error(
+                                "No se pudo crear/validar tu perfil de usuario."
+                            )
+                        )
+                        return@ensureUserProfile
+                    }
+
+                    // 🔹 Luego verificamos si está activo
+                    db.collection("users").document(uid)
+                        .get()
+                        .addOnSuccessListener { doc ->
+                            val active = doc.getBoolean("active") ?: true // si no hay campo, asumimos activo
+                            if (!active) {
+                                auth.signOut()
+                                callback(
+                                    Result.Error(
+                                        "Tu cuenta ha sido desactivada por el administrador."
+                                    )
+                                )
+                            } else {
+                                callback(Result.Success)
+                            }
+                        }
+                        .addOnFailureListener { e ->
+                            auth.signOut()
+                            callback(
+                                Result.Error(
+                                    e.localizedMessage ?: "No se pudo validar el estado de tu cuenta."
+                                )
+                            )
+                        }
                 }
             }
     }
