@@ -5,7 +5,7 @@ import com.google.firebase.Timestamp
 data class UserPost(
     val id: String = "",            // id del documento en Firestore
     val userId: String = "",        // uid de Firebase del dueño
-    val prendaId :String = "",
+    val prendaId: String = "",
     val titulo: String = "",
     val descripcion: String = "",
     val categoria: String = "",     // guardamos el name() del enum
@@ -13,5 +13,6 @@ data class UserPost(
     val estado: String = "",        // Condition.USADO -> "USADO"
     val imageUrls: List<String> = emptyList(),
     val estadoTrueque: String = "0",
+    val hidden: Boolean = false,    // ✅ NUEVO: si el admin la ha ocultado
     val createdAt: Timestamp? = null
 )
