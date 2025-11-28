@@ -29,7 +29,8 @@ object FirestoreManager {
             "uid" to uid,
             "nombre" to nombre,
             "email" to email,
-            "createdAt" to FieldValue.serverTimestamp()
+            "createdAt" to FieldValue.serverTimestamp(),
+            "active" to true                // ✅ NUEVO: usuario activo por defecto
         )
         db.collection("users").document(uid)
             .set(data)
@@ -39,7 +40,7 @@ object FirestoreManager {
     // ---------- CREAR PUBLICACIÓN DE USUARIO ----------
     fun createUserPost(
         uid: String,
-        prendaId : String,
+        prendaId: String,
         titulo: String,
         descripcion: String,
         categoria: String,
@@ -59,9 +60,9 @@ object FirestoreManager {
             "estado" to estado,
             "imageUrls" to imageUrls,
             "estadoTrueque" to estadoTrueque,
+            "hidden" to false,                    // ✅ NUEVO: visible por defecto
             "createdAt" to FieldValue.serverTimestamp()
         )
-
         db.collection("posts")
             .add(data)
             .addOnSuccessListener { onComplete(true, null) }
@@ -75,13 +76,13 @@ object FirestoreManager {
     ): ListenerRegistration {
         return db.collection("posts")
             .whereEqualTo("userId", uid)
+            .whereEqualTo("hidden", false)  // ✅ sólo posts visibles
             .orderBy("createdAt", Query.Direction.DESCENDING)
             .addSnapshotListener { snap, e ->
                 if (e != null) {
                     onChange(emptyList(), e.localizedMessage)
                     return@addSnapshotListener
                 }
-
                 val posts = snap?.documents?.map { doc ->
                     UserPost(
                         id = doc.id,
@@ -92,13 +93,13 @@ object FirestoreManager {
                         categoria = doc.getString("categoria") ?: "",
                         talla = doc.getString("talla") ?: "",
                         estado = doc.getString("estado") ?: "",
-                        estadoTrueque = doc.getString("estadoTrueque")?: "0",
                         imageUrls = (doc.get("imageUrls") as? List<*>)?.filterIsInstance<String>()
                             ?: emptyList(),
+                        estadoTrueque = doc.getString("estadoTrueque") ?: "0",
+                        hidden = doc.getBoolean("hidden") ?: false,   // ✅
                         createdAt = doc.getTimestamp("createdAt")
                     )
                 } ?: emptyList()
-
                 onChange(posts, null)
             }
     }
@@ -335,5 +336,75 @@ object FirestoreManager {
         }
 
         return posts.sortedByDescending { it.solicitantePost.createdAt } // .sortedByDescending { it.request.createdAt }
+    }
+
+    suspend fun setUserActive(uid: String, active: Boolean): Boolean {
+        return try {
+            // 1) Actualizar el estado del usuario
+            db.collection("users")
+                .document(uid)
+                .update("active", active)
+                .await()
+
+            // 2) Si se desactiva, ocultar todos sus posts.
+            //    Si se activa, volver a mostrarlos.
+            val postsSnap = db.collection("posts")
+                .whereEqualTo("userId", uid)
+                .get()
+                .await()
+
+            for (doc in postsSnap.documents) {
+                doc.reference.update("hidden", !active).await()
+            }
+            true
+        } catch (e: Exception) {
+            Log.e("FirestoreManager", "Error al cambiar estado de usuario", e)
+            false
+        }
+    }
+
+    suspend fun setPostHidden(postId: String, hidden: Boolean): Boolean {
+        return try {
+            db.collection("posts")
+                .document(postId)
+                .update("hidden", hidden)
+                .await()
+            true
+        } catch (e: Exception) {
+            Log.e("FirestoreManager", "Error al cambiar visibilidad del post", e)
+            false
+        }
+    }
+    fun ensureUserProfile(
+        uid: String,
+        email: String?,
+        nombre: String? = null,
+        onComplete: (Boolean) -> Unit
+    ) {
+        val docRef = db.collection("users").document(uid)
+
+        docRef.get()
+            .addOnSuccessListener { snapshot ->
+                if (snapshot.exists()) {
+                    // Ya tiene perfil
+                    onComplete(true)
+                } else {
+                    // Crear perfil mínimo
+                    val data = hashMapOf(
+                        "uid" to uid,
+                        "email" to (email ?: ""),
+                        "nombre" to (nombre ?: ""),
+                        "active" to true,
+                        "createdAt" to FieldValue.serverTimestamp()
+                    )
+
+                    docRef.set(data)
+                        .addOnSuccessListener { onComplete(true) }
+                        .addOnFailureListener { onComplete(false) }
+                }
+            }
+            .addOnFailureListener {
+                onComplete(false)
+            }
     }
 }
