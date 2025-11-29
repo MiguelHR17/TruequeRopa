@@ -27,6 +27,7 @@ import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavHostController
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
@@ -37,6 +38,7 @@ import dev.miguelehr.truequeropa.ui.screens.AdminPanelScreen
 import dev.miguelehr.truequeropa.ui.screens.AuthLoginScreen
 import dev.miguelehr.truequeropa.ui.screens.AuthRegisterScreen
 import dev.miguelehr.truequeropa.ui.screens.OffersScreen
+import dev.miguelehr.truequeropa.ui.screens.ProductDetailScreen
 import dev.miguelehr.truequeropa.ui.screens.ProductFormScreen
 import dev.miguelehr.truequeropa.ui.screens.ProfileScreen
 import dev.miguelehr.truequeropa.ui.screens.ProposalsInboxScreen
@@ -59,14 +61,23 @@ sealed class Route(val path: String) {
     data object UserPostsRequests : Route("publicationPosts/{userId}/{postIdSol}/{requestId}")
     data object History : Route("home/history")
 
+    // Detalle de producto ← NUEVO
+    data object ProductDetail : Route("product/{postId}") {
+        fun with(postId: String) = "product/$postId"
+    }
+
     // Perfil propio
     data object Profile : Route("profile/me")
 
     // Perfil ajeno con pin opcional de publicación
     data object ProfileById : Route("profile/{userId}?pin={pin}") {
-        fun with(userId: String, pin: String? = null): String =
-            if (pin.isNullOrBlank()) "profile/$userId?pin="
-            else "profile/$userId?pin=$pin"
+        fun with(userId: String, pin: String? = null): String {
+            return if (pin.isNullOrBlank()) {
+                "profile/$userId"  // ✅ Sin el ?pin= cuando no hay pin
+            } else {
+                "profile/$userId?pin=$pin"
+            }
+        }
     }
 
     // Trueque
@@ -240,10 +251,33 @@ fun AppNav(navController: NavHostController = rememberNavController()) {
                 OffersScreen(
                     onOpenProduct = { productId, ownerUserId ->
                         // Ir al perfil del dueño y fijar esa publicación arriba
-                        navController.navigate(Route.ProfileById.with(ownerUserId, pin = productId))
+                        navController.navigate(Route.ProductDetail.with(productId))
                     },
-                    onOpenUserSearch = { /* callback por compatibilidad si lo necesitas */ },
+                    //onOpenUserSearch = { /* callback por compatibilidad si lo necesitas */ },
                     padding = padding
+                )
+            }
+
+            // ===== DETALLE DE PRODUCTO =====
+
+            composable(
+                route = Route.ProductDetail.path,
+                arguments = listOf(
+                    navArgument("postId") { type = NavType.StringType }
+                )
+            ) { backStackEntry ->
+                val postId = backStackEntry.arguments?.getString("postId") ?: ""
+
+                ProductDetailScreen(
+                    postId = postId,
+                    onBack = { navController.popBackStack() },
+                    onProponerTrueque = { postId, ownerId ->
+                        // TODO: Navegar a pantalla de proponer trueque
+                        navController.popBackStack()
+                    },
+                    onVerPerfil = { userId ->
+                        navController.navigate(Route.ProfileById.with(userId))
+                    }
                 )
             }
 
