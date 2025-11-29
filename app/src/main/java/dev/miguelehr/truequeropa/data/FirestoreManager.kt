@@ -332,7 +332,7 @@ object FirestoreManager {
             }
 
         } catch (e: Exception) {
-           // Log.e(TAG, "Error al obtener las solicitudes de usuario", e)
+            // Log.e(TAG, "Error al obtener las solicitudes de usuario", e)
         }
 
         return posts.sortedByDescending { it.solicitantePost.createdAt } // .sortedByDescending { it.request.createdAt }
@@ -406,5 +406,83 @@ object FirestoreManager {
             .addOnFailureListener {
                 onComplete(false)
             }
+    }
+
+    suspend fun getAllAvailablePosts(): List<UserPostsDetails> {
+        val posts = mutableListOf<UserPostsDetails>()
+
+        try {
+            Log.d("FirestoreManager", "Iniciando consulta de posts disponibles...")
+
+            val allPostsSnapshot = db.collection("posts")
+                .whereEqualTo("estadoTrueque", "0")
+                .whereEqualTo("hidden", false)  // ✅ Solo posts visibles
+                .get()
+                .await()
+
+            Log.d("FirestoreManager", "Documentos encontrados: ${allPostsSnapshot.size()}")
+
+            for (document in allPostsSnapshot.documents) {
+                val post = document.toObject(UserPost::class.java)?.copy(id = document.id)
+
+                if (post != null) {
+                    Log.d("FirestoreManager", "Post agregado - ID: ${post.id}, Titulo: ${post.titulo}")
+                    posts.add(UserPostsDetails(post))
+                } else {
+                    Log.e("FirestoreManager", "No se pudo parsear documento: ${document.id}")
+                }
+            }
+
+            // Ordenar manualmente por fecha
+            posts.sortByDescending { it.solicitantePost.createdAt }
+
+            Log.d("FirestoreManager", "Total posts procesados: ${posts.size}")
+        } catch (e: Exception) {
+            Log.e("FirestoreManager", "Error al obtener todos los posts", e)
+        }
+
+        return posts
+    }
+
+    suspend fun getPostWithUserDetails(postId: String): Pair<UserPost, UserProfile>? {
+        return try {
+            Log.d("FirestoreManager", "Buscando post con ID: $postId")
+
+            val postDoc = db.collection("posts").document(postId).get().await()
+
+            if (!postDoc.exists()) {
+                Log.e("FirestoreManager", "Post no existe: $postId")
+                return null
+            }
+
+            Log.d("FirestoreManager", "Post encontrado: ${postDoc.data}")
+
+            val post = postDoc.toObject(UserPost::class.java)?.copy(id = postDoc.id)
+
+            if (post == null) {
+                Log.e("FirestoreManager", "No se pudo parsear el post")
+                return null
+            }
+
+            Log.d("FirestoreManager", "Buscando usuario: ${post.userId}")
+            var userProfile = getUser(post.userId)
+
+            // ✅ Si no existe el usuario, crear uno temporal
+            if (userProfile == null) {
+                Log.w("FirestoreManager", "Usuario no encontrado, creando perfil temporal")
+                userProfile = UserProfile(
+                    uid = post.userId,
+                    nombre = "Usuario desconocido",
+                    email = "Sin email"
+                )
+            }
+
+            Log.d("FirestoreManager", "Usuario obtenido: ${userProfile.nombre}")
+
+            Pair(post, userProfile)
+        } catch (e: Exception) {
+            Log.e("FirestoreManager", "Error al obtener post con detalles", e)
+            null
+        }
     }
 }

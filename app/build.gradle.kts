@@ -50,15 +50,19 @@ dependencies {
     implementation(libs.androidx.compose.ui.graphics)
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.compose.material3)
-    implementation("androidx.navigation:navigation-compose:2.8.3")
+
+    // Actualizar estas versiones:
+    implementation("androidx.navigation:navigation-compose:2.9.6")  // era 2.8.3
     implementation("androidx.compose.material:material-icons-extended")
-    implementation("io.coil-kt:coil-compose:2.6.0")
-    implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.6")
-    implementation("androidx.activity:activity-compose:1.9.0")
+    implementation("io.coil-kt:coil-compose:2.7.0")  // era 2.6.0
+    implementation("androidx.lifecycle:lifecycle-runtime-compose:2.10.0")  // era 2.8.6
+    implementation("androidx.activity:activity-compose:1.12.0")  // era 1.9.0
+
     implementation(libs.firebase.firestore)
     implementation(libs.firebase.auth)
     implementation(libs.androidx.material3)
     implementation(libs.androidx.compose.foundation)
+    implementation(libs.androidx.lifecycle.viewmodel.ktx)
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
@@ -67,14 +71,13 @@ dependencies {
     debugImplementation(libs.androidx.compose.ui.tooling)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
 
-    //Firebase BoM
-    implementation(platform("com.google.firebase:firebase-bom:34.4.0"))
+    // Firebase BoM - Actualizar versión:
+    implementation(platform("com.google.firebase:firebase-bom:34.6.0"))  // era 34.4.0
     implementation("com.google.firebase:firebase-auth")
     implementation("com.google.firebase:firebase-firestore")
-
-    // Firebase Storage
     implementation("com.google.firebase:firebase-storage")
 
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.8.1")
+    // Coroutines - Actualizar versión:
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.10.2")  // era 1.8.1
 }
     apply(plugin = "com.google.gms.google-services")
