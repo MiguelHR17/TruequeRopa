@@ -15,18 +15,17 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Person
-import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -58,7 +57,7 @@ fun ProductDetailScreen(
     postId: String,
     onBack: () -> Unit,
     onProponerTrueque: (String, String) -> Unit,
-    onVerPerfil: (String) -> Unit  // ✅ NUEVO: Callback para ver perfil
+    onVerPerfil: (String) -> Unit
 ) {
     var post by remember { mutableStateOf<UserPost?>(null) }
     var owner by remember { mutableStateOf<UserProfile?>(null) }
@@ -67,6 +66,7 @@ fun ProductDetailScreen(
 
     val scope = rememberCoroutineScope()
 
+    // Cargar post + info de usuario de Firestore
     LaunchedEffect(postId) {
         scope.launch {
             try {
@@ -79,11 +79,20 @@ fun ProductDetailScreen(
                 if (result != null) {
                     post = result.first
                     owner = result.second
-                    Log.d("ProductDetailScreen", "Post cargado: ${result.first.titulo}")
-                    Log.d("ProductDetailScreen", "Imágenes: ${result.first.imageUrls.size}")
+                    Log.d(
+                        "ProductDetailScreen",
+                        "Post cargado: ${result.first.titulo}"
+                    )
+                    Log.d(
+                        "ProductDetailScreen",
+                        "Imágenes: ${result.first.imageUrls.size}"
+                    )
                 } else {
                     error = "No se encontró el producto"
-                    Log.e("ProductDetailScreen", "Result es null para postId: $postId")
+                    Log.e(
+                        "ProductDetailScreen",
+                        "Result es null para postId: $postId"
+                    )
                 }
             } catch (e: Exception) {
                 error = e.localizedMessage ?: "Error desconocido"
@@ -100,7 +109,10 @@ fun ProductDetailScreen(
                 title = { Text("Detalle del producto") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Default.ArrowBack, "Volver")
+                        Icon(
+                            imageVector = Icons.Filled.ArrowBack,
+                            contentDescription = "Volver"
+                        )
                     }
                 }
             )
@@ -109,42 +121,30 @@ fun ProductDetailScreen(
         when {
             isLoading -> {
                 Box(
-                    Modifier
+                    modifier = Modifier
                         .fillMaxSize()
                         .padding(padding),
                     contentAlignment = Alignment.Center
                 ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        CircularProgressIndicator()
-                        Spacer(Modifier.height(16.dp))
-                        Text("Cargando producto...")
-                    }
+                    CircularProgressIndicator()
                 }
             }
+
             error != null -> {
                 Box(
-                    Modifier
+                    modifier = Modifier
                         .fillMaxSize()
                         .padding(padding),
                     contentAlignment = Alignment.Center
                 ) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        modifier = Modifier.padding(24.dp)
-                    ) {
-                        Text(
-                            error ?: "Error",
-                            color = MaterialTheme.colorScheme.error,
-                            style = MaterialTheme.typography.titleMedium
-                        )
-                        Spacer(Modifier.height(16.dp))
-                        Button(onClick = onBack) {
-                            Text("Volver")
-                        }
-                    }
+                    Text(error ?: "Ocurrió un error")
                 }
             }
+
             post != null && owner != null -> {
+                val p = post!!
+                val o = owner!!
+
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
@@ -153,24 +153,32 @@ fun ProductDetailScreen(
                         .padding(16.dp)
                 ) {
                     // Galería de imágenes
-                    if (post!!.imageUrls.isNotEmpty()) {
+                    if (p.imageUrls.isNotEmpty()) {
                         LazyRow(
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            items(post!!.imageUrls) { imageUrl ->
-                                Image(
-                                    painter = rememberAsyncImagePainter(imageUrl),
-                                    contentDescription = post!!.titulo,
+                            items(p.imageUrls) { url ->
+                                Card(
                                     modifier = Modifier
-                                        .size(300.dp)
-                                        .clip(RoundedCornerShape(12.dp)),
-                                    contentScale = ContentScale.Crop
-                                )
+                                        .size(200.dp),
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = MaterialTheme.colorScheme.surfaceVariant
+                                    )
+                                ) {
+                                    Image(
+                                        painter = rememberAsyncImagePainter(url),
+                                        contentDescription = p.titulo,
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .clip(MaterialTheme.shapes.medium),
+                                        contentScale = ContentScale.Crop
+                                    )
+                                }
                             }
                         }
                     } else {
-                        // Placeholder cuando no hay imagen
+                        // Sin imágenes
                         Card(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -185,7 +193,7 @@ fun ProductDetailScreen(
                             ) {
                                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                     Icon(
-                                        imageVector = Icons.Default.Person,
+                                        imageVector = Icons.Filled.Image,
                                         contentDescription = null,
                                         modifier = Modifier.size(64.dp),
                                         tint = MaterialTheme.colorScheme.onSurfaceVariant
@@ -205,26 +213,37 @@ fun ProductDetailScreen(
 
                     // Título
                     Text(
-                        text = post!!.titulo,
+                        text = p.titulo,
                         style = MaterialTheme.typography.headlineMedium
                     )
 
-                    Spacer(Modifier.height(12.dp))
+                    Spacer(Modifier.height(8.dp))
 
-                    // Tags
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        AssistChip(
-                            onClick = {},
-                            label = { Text(post!!.categoria) }
-                        )
-                        AssistChip(
-                            onClick = {},
-                            label = { Text("Talla ${post!!.talla}") }
-                        )
-                        AssistChip(
-                            onClick = {},
-                            label = { Text(post!!.estado) }
-                        )
+                    // Chips de info básica
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        if (p.categoria.isNotBlank()) {
+                            FilterChip(
+                                selected = false,
+                                onClick = {},
+                                label = { Text(p.categoria) }
+                            )
+                        }
+                        if (p.talla.isNotBlank()) {
+                            FilterChip(
+                                selected = false,
+                                onClick = {},
+                                label = { Text("Talla ${p.talla}") }
+                            )
+                        }
+                        if (p.estado.isNotBlank()) {
+                            FilterChip(
+                                selected = false,
+                                onClick = {},
+                                label = { Text(p.estado) }
+                            )
+                        }
                     }
 
                     Spacer(Modifier.height(16.dp))
@@ -236,13 +255,13 @@ fun ProductDetailScreen(
                     )
                     Spacer(Modifier.height(8.dp))
                     Text(
-                        text = post!!.descripcion,
+                        text = p.descripcion,
                         style = MaterialTheme.typography.bodyMedium
                     )
 
                     Spacer(Modifier.height(24.dp))
 
-                    // ✅ Info del dueño CON BOTÓN
+                    // Info del dueño + botón "Ver perfil"
                     Card(
                         modifier = Modifier.fillMaxWidth(),
                         colors = CardDefaults.cardColors(
@@ -255,38 +274,34 @@ fun ProductDetailScreen(
                                 style = MaterialTheme.typography.titleSmall,
                                 color = MaterialTheme.colorScheme.onSecondaryContainer
                             )
+                            Spacer(Modifier.height(4.dp))
+                            Text(
+                                text = o.nombre.ifBlank { o.email.substringBefore("@") },
+                                style = MaterialTheme.typography.titleMedium,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer
+                            )
+                            Spacer(Modifier.height(2.dp))
+                            Text(
+                                text = o.email,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme
+                                    .onSecondaryContainer
+                                    .copy(alpha = 0.7f)
+                            )
+
                             Spacer(Modifier.height(8.dp))
 
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
+                            // Botón para ver perfil
+                            TextButton(
+                                onClick = { onVerPerfil(p.userId) }
                             ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = owner!!.nombre,
-                                        style = MaterialTheme.typography.titleMedium,
-                                        color = MaterialTheme.colorScheme.onSecondaryContainer
-                                    )
-                                    Text(
-                                        text = owner!!.email,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f)
-                                    )
-                                }
-
-                                // ✅ BOTÓN PARA VER PERFIL
-                                TextButton(
-                                    onClick = { onVerPerfil(post!!.userId) }
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Person,
-                                        contentDescription = "Ver perfil",
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                    Spacer(Modifier.size(4.dp))
-                                    Text("Ver perfil")
-                                }
+                                Icon(
+                                    imageVector = Icons.Filled.Person,
+                                    contentDescription = "Ver perfil",
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(Modifier.size(4.dp))
+                                Text("Ver perfil")
                             }
                         }
                     }
@@ -295,11 +310,22 @@ fun ProductDetailScreen(
 
                     // Botón de proponer trueque
                     Button(
-                        onClick = { onProponerTrueque(postId, post!!.userId) },
+                        onClick = { onProponerTrueque(postId, p.userId) },
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Text("Proponer Trueque")
                     }
+                }
+            }
+
+            else -> {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(padding),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("No se encontró el producto.")
                 }
             }
         }

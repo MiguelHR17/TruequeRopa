@@ -204,6 +204,20 @@ object FirestoreManager {
         return propietarioProfile
     }
 
+    // ➕ NUEVO: actualizar campo photoUrl del usuario
+    suspend fun updateUserPhoto(uid: String, photoUrl: String): Boolean {
+        return try {
+            db.collection("users")
+                .document(uid)
+                .update("photoUrl", photoUrl)
+                .await()
+            true
+        } catch (e: Exception) {
+            Log.e("FirestoreManager", "Error al actualizar foto de usuario", e)
+            false
+        }
+    }
+
     suspend fun getUserRequestDetails(requestId: String): UserRequestDetails? {
         val requestDoc = db.collection("request").document(requestId).get().await()
         val request = requestDoc.toObject(UserRequest::class.java) ?: return null
