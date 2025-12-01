@@ -338,13 +338,16 @@ fun AppNav(navController: NavHostController = rememberNavController()) {
             }
 
             // ===== PERFIL =====
-            // Perfil propio
+// Perfil propio
             composable(Route.Profile.path) {
                 ProfileScreen(
-                    userId = null,              // null => actual
-                    pinProductId = null,        // sin publicación fijada
+                    userId = null, // null => actual
+                    pinProductId = null, // sin publicación fijada
                     onPublish = { navController.navigate(Route.NewProduct.path) },
-                    onOpenProduct = { /* Detalle interno si quisieras */ },
+                    onOpenProduct = { postId ->
+                        // MISMO detalle que se usa en OffersScreen
+                        navController.navigate(Route.ProductDetail.with(postId))
+                    },
                     padding = padding
                 )
             }
@@ -362,8 +365,10 @@ fun AppNav(navController: NavHostController = rememberNavController()) {
                 ProfileScreen(
                     userId = uid,
                     pinProductId = pin?.takeIf { it.isNotBlank() },
-                    onPublish = { /* en perfil ajeno normalmente no se muestra */ },
-                    onOpenProduct = { /* expandir dentro del propio perfil */ },
+                    onPublish = { /* en perfil ajeno no se usa */ },
+                    onOpenProduct = { postId ->
+                        navController.navigate(Route.ProductDetail.with(postId))
+                    },
                     padding = padding
                 )
             }

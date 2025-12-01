@@ -51,4 +51,28 @@ object FirebaseStorageManager {
 
         return result
     }
+    // ➕ NUEVO: subir foto de perfil
+    suspend fun uploadProfilePhoto(
+        context: Context,
+        uid: String,
+        uri: Uri
+    ): String? {
+        return try {
+            val ref = storage.reference
+                .child("users")
+                .child(uid)
+                .child("profile.jpg")
+
+            val bytes = withContext(Dispatchers.IO) {
+                context.contentResolver.openInputStream(uri)?.use { input ->
+                    input.readBytes()
+                }
+            } ?: return null
+
+            val snapshot = ref.putBytes(bytes).await()
+            snapshot.storage.downloadUrl.await().toString()
+        } catch (e: Exception) {
+            null
+        }
+    }
 }

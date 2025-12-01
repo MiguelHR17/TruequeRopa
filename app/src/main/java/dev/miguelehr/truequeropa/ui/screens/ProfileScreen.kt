@@ -1,56 +1,132 @@
 package dev.miguelehr.truequeropa.ui.screens
 
-import androidx.compose.foundation.background
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ElevatedButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
-import dev.miguelehr.truequeropa.model.FakeRepository
 import dev.miguelehr.truequeropa.auth.FirebaseAuthManager
 import dev.miguelehr.truequeropa.data.FirestoreManager
+import dev.miguelehr.truequeropa.data.FirebaseStorageManager
 import dev.miguelehr.truequeropa.model.UserPost
-import androidx.compose.material.icons.filled.Delete
-import coil.compose.AsyncImage
-import androidx.compose.ui.layout.ContentScale
+import dev.miguelehr.truequeropa.model.UserProfile
+import kotlinx.coroutines.launch
 
 /**
  * Pantalla de Perfil
- *
- * @param userId        Si es null => perfil del usuario autenticado
- * @param pinProductId  (por ahora sin uso real, se usaba con FakeRepository)
- * @param onPublish     Navega a la pantalla de "Publicar"
- * @param onOpenProduct Acción al abrir una publicación (por ahora no se usa con UserPost)
- * @param padding       Padding del Scaffold
  */
 @Composable
 fun ProfileScreen(
     userId: String? = null,
-    pinProductId: String? = null, // reservado para futura lógica de "pin"
+    pinProductId: String? = null,
     onPublish: () -> Unit,
     onOpenProduct: (String) -> Unit,
     padding: PaddingValues
 ) {
-    val me = remember { FakeRepository.currentUser }
-    val myId = me.id
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
 
-    // Usuario del perfil (si userId es null, muestra mi propio perfil)
-    val targetUser = remember(userId) {
-        FakeRepository.users.find { it.id == userId } ?: me
+    val currentUid = FirebaseAuthManager.currentUserId()
+    val uidForProfile = userId ?: currentUid
+
+    var profile by remember { mutableStateOf<UserProfile?>(null) }
+    var loadingProfile by remember { mutableStateOf(true) }
+    var errorProfile by remember { mutableStateOf<String?>(null) }
+
+    // URL que se muestra en el circulito (puede ser content:// o https://)
+    var localPhotoUrl by remember { mutableStateOf<String?>(null) }
+    var uploadingPhoto by remember { mutableStateOf(false) }
+
+    // Para mostrar la foto en grande
+    var showPhotoPreview by remember { mutableStateOf(false) }
+
+    // Cargar perfil desde Firestore
+    LaunchedEffect(uidForProfile) {
+        if (uidForProfile == null) {
+            errorProfile = "Debes iniciar sesión para ver tu perfil."
+            loadingProfile = false
+            return@LaunchedEffect
+        }
+        loadingProfile = true
+        errorProfile = null
+        try {
+            val fetched = FirestoreManager.getUser(uidForProfile)
+            profile = fetched
+            localPhotoUrl = fetched?.photoUrl    // <- SE TOMA DE FIRESTORE
+        } catch (e: Exception) {
+            errorProfile = e.localizedMessage ?: "Error al cargar el perfil."
+        } finally {
+            loadingProfile = false
+        }
     }
-    val isMe = targetUser.id == me.id
+
+    val isMe = uidForProfile != null && uidForProfile == currentUid
+
+    // Picker de imagen para la foto de perfil
+    val photoPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        if (uri != null && uidForProfile != null) {
+            // 1) Preview inmediato
+            localPhotoUrl = uri.toString()
+
+            // 2) Subir a Storage y guardar URL real en Firestore
+            scope.launch {
+                uploadingPhoto = true
+                try {
+                    val url = FirebaseStorageManager.uploadProfilePhoto(
+                        context = context,
+                        uid = uidForProfile,
+                        uri = uri
+                    )
+                    if (url != null) {
+                        val ok = FirestoreManager.updateUserPhoto(uidForProfile, url)
+                        if (ok) {
+                            localPhotoUrl = url
+                            profile = profile?.copy(photoUrl = url)
+                        }
+                    }
+                } finally {
+                    uploadingPhoto = false
+                }
+            }
+        }
+    }
 
     Column(
         modifier = Modifier
@@ -58,25 +134,69 @@ fun ProfileScreen(
             .fillMaxSize()
             .padding(horizontal = 16.dp, vertical = 12.dp)
     ) {
+        when {
+            loadingProfile -> {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator()
+                }
+                return@Column
+            }
+
+            errorProfile != null || uidForProfile == null || profile == null -> {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(errorProfile ?: "No se pudo cargar el perfil.")
+                }
+                return@Column
+            }
+        }
+
+        val user = profile!!
+
+        val fullName = user.nombre.ifBlank { user.email.substringBefore("@") }
+        val nameParts = fullName.trim().split(" ", limit = 2)
+        val firstName = nameParts.getOrNull(0) ?: ""
+        val lastName = nameParts.getOrNull(1).orEmpty()
+
         // ===== Header =====
         Row(verticalAlignment = Alignment.CenterVertically) {
-            if (!targetUser.photoUrl.isNullOrBlank()) {
-                AsyncImage(
-                    model = targetUser.photoUrl,
-                    contentDescription = null,
-                    modifier = Modifier
-                        .size(72.dp)
-                        .clip(CircleShape)
-                )
-            } else {
-                Surface(
-                    tonalElevation = 2.dp,
-                    modifier = Modifier
-                        .size(72.dp)
-                        .clip(CircleShape)
-                ) {
-                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Text(targetUser.nombre.take(1).uppercase())
+
+            // Avatar clickeable para ver la foto en grande
+            Box(
+                modifier = Modifier
+                    .size(72.dp)
+                    .clip(CircleShape)
+                    .clickable(
+                        enabled = !localPhotoUrl.isNullOrBlank()
+                    ) { showPhotoPreview = true }
+            ) {
+                if (!localPhotoUrl.isNullOrBlank()) {
+                    AsyncImage(
+                        model = localPhotoUrl,
+                        contentDescription = null,
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop
+                    )
+                } else {
+                    Surface(
+                        tonalElevation = 2.dp,
+                        modifier = Modifier.fillMaxSize()
+                    ) {
+                        Box(
+                            Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(firstName.take(1).uppercase())
+                        }
                     }
                 }
             }
@@ -85,66 +205,115 @@ fun ProfileScreen(
 
             Column(Modifier.weight(1f)) {
                 Text(
-                    targetUser.nombre,
+                    text = fullName,
                     style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.SemiBold
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
+                if (lastName.isNotBlank()) {
+                    Text(
+                        text = "Apellido: $lastName",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
                 Text(
-                    targetUser.correo,
+                    text = "Correo: ${user.email}",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
 
             if (isMe) {
-                ElevatedButton(onClick = { /* TODO: abrir picker y actualizar photoUrl */ }) {
-                    Icon(Icons.Filled.Edit, contentDescription = null)
-                    Spacer(Modifier.width(6.dp))
-                    Text("Editar foto")
+                ElevatedButton(
+                    onClick = {
+                        if (!uploadingPhoto) {
+                            photoPickerLauncher.launch("image/*")
+                        }
+                    }
+                ) {
+                    if (uploadingPhoto) {
+                        CircularProgressIndicator(
+                            strokeWidth = 2.dp,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    } else {
+                        androidx.compose.material3.Icon(
+                            imageVector = Icons.Filled.Edit,
+                            contentDescription = null
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Text("Editar foto")
+                    }
                 }
             }
         }
 
         Spacer(Modifier.height(12.dp))
 
-        // CTA Publicar
-        Button(
-            onClick = onPublish,
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text("Publicar")
+        if (isMe) {
+            Button(
+                onClick = onPublish,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Publicar")
+            }
+            Spacer(Modifier.height(12.dp))
         }
 
-        Spacer(Modifier.height(12.dp))
-
-        // Título de publicaciones
         Text(
-            if (isMe) "Mis publicaciones" else "Publicaciones",
+            text = if (isMe) "Mis publicaciones" else "Publicaciones",
             style = MaterialTheme.typography.titleMedium
         )
         Spacer(Modifier.height(8.dp))
 
-        // ===== Listado REAL de publicaciones desde Firestore =====
-        // userId == null  => uso el usuario autenticado (mi perfil)
-        // userId != null   => perfil de otro usuario
         UserPostsSection(
-            userId = if (isMe) null else targetUser.id,
-            isOwner = isMe,                    // 👈 solo el dueño puede eliminar
+            userId = if (isMe) null else uidForProfile,
+            isOwner = isMe,
+            onOpenProduct = onOpenProduct,
             modifier = Modifier.weight(1f)
+        )
+    }
+
+    // ===== Preview en grande de la foto de perfil =====
+    if (showPhotoPreview && !localPhotoUrl.isNullOrBlank()) {
+        AlertDialog(
+            onDismissRequest = { showPhotoPreview = false },
+            confirmButton = {
+                TextButton(onClick = { showPhotoPreview = false }) {
+                    Text("Cerrar")
+                }
+            },
+            text = {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(320.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    AsyncImage(
+                        model = localPhotoUrl,
+                        contentDescription = "Foto de perfil",
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .fillMaxHeight()
+                            .clip(RoundedCornerShape(12.dp)),
+                        contentScale = ContentScale.Fit
+                    )
+                }
+            }
         )
     }
 }
 
-/**
- * Sección que escucha en tiempo real las publicaciones de un usuario
- * desde Firestore y las muestra en un LazyColumn.
- *
- * @param userId  Si es null => usa el uid del usuario autenticado
- */
+/* ==== UserPostsSection, UserPostCard y SmallTag se quedan igual ==== */
+
 @Composable
 fun UserPostsSection(
     userId: String?,
     isOwner: Boolean,
+    onOpenProduct: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val uidForProfile = userId ?: FirebaseAuthManager.currentUserId()
@@ -152,6 +321,7 @@ fun UserPostsSection(
     var loading by remember { mutableStateOf(true) }
     var error by remember { mutableStateOf<String?>(null) }
     var deletingId by remember { mutableStateOf<String?>(null) }
+    var postToDelete by remember { mutableStateOf<UserPost?>(null) }
 
     if (uidForProfile == null) {
         Box(
@@ -163,7 +333,6 @@ fun UserPostsSection(
         return
     }
 
-    // Escuchar los posts del usuario en tiempo real
     DisposableEffect(uidForProfile) {
         val reg = FirestoreManager.listenPostsForUser(uidForProfile) { list, err ->
             if (err != null) {
@@ -175,7 +344,6 @@ fun UserPostsSection(
                 loading = false
             }
         }
-
         onDispose { reg.remove() }
     }
 
@@ -220,19 +388,50 @@ fun UserPostsSection(
                             post = post,
                             canDelete = isOwner,
                             deleting = deletingId == post.id,
-                            onDelete = {
-                                deletingId = post.id
-                                FirestoreManager.deleteUserPost(post.id) { ok, err ->
-                                    if (!ok) {
-                                        error = err ?: "No se pudo eliminar la publicación"
-                                    }
-                                    deletingId = null
-                                }
-                            }
+                            onDelete = { postToDelete = post },
+                            onClick = { onOpenProduct(post.id) }
                         )
                     }
                 }
             }
+        }
+
+        val toDelete = postToDelete
+        if (toDelete != null) {
+            AlertDialog(
+                onDismissRequest = {
+                    if (deletingId == null) postToDelete = null
+                },
+                title = { Text("Eliminar publicación") },
+                text = {
+                    Text("¿Estás seguro de eliminar esta publicación? Esta acción no se puede deshacer.")
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            deletingId = toDelete.id
+                            FirestoreManager.deleteUserPost(toDelete.id) { ok, err ->
+                                if (!ok) {
+                                    error = err ?: "No se pudo eliminar la publicación"
+                                }
+                                deletingId = null
+                                postToDelete = null
+                            }
+                        },
+                        enabled = deletingId == null
+                    ) {
+                        Text("Eliminar", color = MaterialTheme.colorScheme.error)
+                    }
+                },
+                dismissButton = {
+                    TextButton(
+                        onClick = { postToDelete = null },
+                        enabled = deletingId == null
+                    ) {
+                        Text("Cancelar")
+                    }
+                }
+            )
         }
     }
 }
@@ -242,17 +441,18 @@ private fun UserPostCard(
     post: UserPost,
     canDelete: Boolean,
     deleting: Boolean,
-    onDelete: () -> Unit
+    onDelete: () -> Unit,
+    onClick: () -> Unit
 ) {
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() },
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceVariant
         )
     ) {
         Column(Modifier.padding(12.dp)) {
-
-            // 👇 Mostrar la primera imagen (si hay)
             val firstImage = post.imageUrls.firstOrNull()
             if (firstImage != null) {
                 AsyncImage(
@@ -267,32 +467,29 @@ private fun UserPostCard(
                 Spacer(Modifier.height(8.dp))
             }
 
-            // Título y descripción
             Text(
-                post.titulo,
+                text = post.titulo,
                 style = MaterialTheme.typography.titleMedium,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
             Spacer(Modifier.height(4.dp))
+
             Text(
-                post.descripcion,
+                text = post.descripcion,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 3,
                 overflow = TextOverflow.Ellipsis
             )
-
             Spacer(Modifier.height(8.dp))
 
-            // Tags de info básica
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 SmallTag(post.talla)
                 SmallTag(post.estado)
                 SmallTag(post.categoria)
             }
 
-            // Botón eliminar solo si es el dueño del perfil
             if (canDelete) {
                 Spacer(Modifier.height(8.dp))
                 Row(
@@ -312,11 +509,11 @@ private fun UserPostCard(
                             Spacer(Modifier.width(6.dp))
                             Text("Eliminando…")
                         } else {
-                            Icon(
+                            androidx.compose.material3.Icon(
                                 imageVector = Icons.Filled.Delete,
-                                contentDescription = "Eliminar publicación"
+                                contentDescription = "Eliminar"
                             )
-                            Spacer(Modifier.width(4.dp))
+                            Spacer(Modifier.width(6.dp))
                             Text("Eliminar")
                         }
                     }
@@ -328,12 +525,15 @@ private fun UserPostCard(
 
 @Composable
 private fun SmallTag(text: String) {
-    Box(
-        modifier = Modifier
-            .clip(RoundedCornerShape(100))
-            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.6f))
-            .padding(horizontal = 10.dp, vertical = 6.dp)
+    Surface(
+        shape = RoundedCornerShape(50),
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        tonalElevation = 1.dp
     ) {
-        Text(text, style = MaterialTheme.typography.labelMedium, color = Color.Unspecified)
+        Text(
+            text = text,
+            style = MaterialTheme.typography.labelSmall,
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+        )
     }
 }
