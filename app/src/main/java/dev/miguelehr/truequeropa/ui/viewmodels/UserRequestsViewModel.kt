@@ -4,6 +4,7 @@ import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.firebase.firestore.FieldValue
+import dev.miguelehr.truequeropa.auth.FirebaseMockLinker
 import dev.miguelehr.truequeropa.data.FirestoreManager
 import dev.miguelehr.truequeropa.model.UserPostsDetails
 import dev.miguelehr.truequeropa.model.UserProfile
@@ -12,6 +13,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class UserRequestsViewModel : ViewModel() {
 
@@ -19,6 +21,37 @@ class UserRequestsViewModel : ViewModel() {
     private val _userPosts = MutableStateFlow<List<UserPostsDetails>>(emptyList())
     val userRequests: StateFlow<List<UserRequestDetails>> = _userRequests
     val userPosts: StateFlow<List<UserPostsDetails>> = _userPosts
+
+    suspend fun createRequest(
+        postIdPropietario: String,
+        postIdSolicitante: String,
+        estado: String
+    ): Boolean {
+        // withContext(Dispatchers.IO) asegura que esta operación de red se ejecute en un hilo de fondo.
+        return withContext(Dispatchers.IO) {
+            FirestoreManager.createUserRequest(postIdPropietario, postIdSolicitante, estado){ ok ->
+
+            }
+        }
+    }
+
+    fun launchCreateRequest(
+        postIdPropietario: String,
+        postIdSolicitante: String,
+        estado: String,
+        onComplete: (Boolean) -> Unit // Callback para notificar el resultado a la UI
+    ) {
+        viewModelScope.launch {
+            // Llama a TU PROPIA función suspend 'createRequest'
+            val success = createRequest(postIdPropietario, postIdSolicitante, estado)
+            if (success) {
+            // Usa el callback 'onComplete' para devolver el resultado
+            onComplete(success)
+            } else {
+            onComplete(false)
+            }
+        }
+    }
 
     fun fetchUserRequests(userId: String,report: Int ) {
         viewModelScope.launch {

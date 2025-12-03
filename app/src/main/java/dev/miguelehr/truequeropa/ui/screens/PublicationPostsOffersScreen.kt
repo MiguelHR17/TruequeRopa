@@ -47,6 +47,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.rememberAsyncImagePainter
+import dev.miguelehr.truequeropa.auth.FirebaseMockLinker
 import dev.miguelehr.truequeropa.model.FakeRepository.generateImageUrl
 import dev.miguelehr.truequeropa.model.UserPostsDetails
 import dev.miguelehr.truequeropa.model.UserProfile
@@ -54,11 +55,10 @@ import dev.miguelehr.truequeropa.ui.viewmodels.UserRequestsViewModel
 import kotlinx.coroutines.launch
 
 @Composable
-fun PublicationPostsScreen(
+fun PublicationPostsOffersScreen(
     userId: String,
-    postIdSol: String,
-    requestId:String,
-    onNavigateToRequestDetails: (String) -> Unit,
+    postIdProp: String,
+    onNavigateToOffers: () -> Unit,
     onBack: () -> Unit,
     vm: UserRequestsViewModel = viewModel()
 ) {
@@ -66,11 +66,11 @@ fun PublicationPostsScreen(
     val userPosts by vm.userPosts.collectAsState()
     var selectedPostId by remember { mutableStateOf<String?>(null) }
     var showDialogForPost by remember { mutableStateOf<String?>(null) }
-    var userSolicitante by remember { mutableStateOf<UserProfile?>(null) }
+    var userPropietario by remember { mutableStateOf<UserProfile?>(null) }
     val scope = rememberCoroutineScope()
 
     LaunchedEffect(userId) {
-        userSolicitante = vm.selUser(userId)
+        userPropietario = vm.selUser(userId)
     }
 
     showDialogForPost?.let { postId ->
@@ -85,11 +85,24 @@ fun PublicationPostsScreen(
                     onClick = {
 
                         scope.launch {
-                            vm.updPost(postIdSol, "0")
-                            vm.updPostRequestSolicitante (requestId, postId)
-                            vm.updPost(postId, "1")
-                             //onNavigateToRequestDetails(userId)
-                            onBack()
+                            vm.launchCreateRequest  (postIdProp,postId,"0"){ success ->
+                                if (success) {
+                                    scope.launch {
+                                        FirebaseMockLinker.syncCurrentUserIntoMock()
+
+                                        // 3. Llama a las funciones suspend AHORA, después del éxito.
+                                        vm.updPost(postId, "1")
+                                        vm.updPost(postIdProp, "1")
+
+                                        // 4. Navega solo si todo lo anterior funcionó.
+                                        onNavigateToOffers()
+                                    }
+                                } else {
+                                    // Lógica para cuando falla
+                                }
+                            }
+
+
                         }
 
                         // Cerramos el diálogo después de navegar.
@@ -123,7 +136,7 @@ fun PublicationPostsScreen(
     ) {
         Spacer(Modifier.height(24.dp))
         Text(
-            text = "Prendas de ${userSolicitante?.nombre?.uppercase()}:",
+            text = "Prendas de ${userPropietario?.nombre?.uppercase()}:",
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.Medium
         )
@@ -135,7 +148,7 @@ fun PublicationPostsScreen(
 
             items(userPosts) { postDetails ->
 
-                PostItem(
+                PostItemOffer(
                     postDetails = postDetails,
                     isSelected = postDetails.solicitantePost.id == selectedPostId,
                     onItemClick = {
@@ -161,7 +174,7 @@ fun PublicationPostsScreen(
  * Puedes personalizarlo como quieras.
  */
 @Composable
-fun PostItem(
+fun PostItemOffer(
     postDetails: UserPostsDetails,
     isSelected: Boolean, // <-- Recibe si está seleccionado
     onItemClick: () -> Unit // <-- Recibe la acción de clic
@@ -204,28 +217,28 @@ fun PostItem(
                     .background(Color.LightGray)
             )
             Spacer(Modifier.width(16 .dp))
-        Column(
-            modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-            Text(
-                text = postDetails.solicitantePost.titulo.uppercase(),
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold
-            )
-            Text(
-                "${postDetails.solicitantePost.categoria} • Talla ${postDetails.solicitantePost.talla}",
-                style = MaterialTheme.typography.bodySmall
-            )
-            Text(
-                text = "Descripción: ${postDetails.solicitantePost.descripcion} ",
-                style = MaterialTheme.typography.bodyMedium,
-                maxLines = 2
-            )
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Text(
+                    text = postDetails.solicitantePost.titulo.uppercase(),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    "${postDetails.solicitantePost.categoria} • Talla ${postDetails.solicitantePost.talla}",
+                    style = MaterialTheme.typography.bodySmall
+                )
+                Text(
+                    text = "Descripción: ${postDetails.solicitantePost.descripcion} ",
+                    style = MaterialTheme.typography.bodyMedium,
+                    maxLines = 2
+                )
 
-            AssistChip(onClick = {}, label = { Text("Estado: ${postDetails.solicitantePost.estado}") })
+                AssistChip(onClick = {}, label = { Text("Estado: ${postDetails.solicitantePost.estado}") })
 
-        }
+            }
         }
     }
 }

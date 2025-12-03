@@ -43,6 +43,7 @@ import dev.miguelehr.truequeropa.ui.screens.ProductFormScreen
 import dev.miguelehr.truequeropa.ui.screens.ProfileScreen
 import dev.miguelehr.truequeropa.ui.screens.ProposalsInboxScreen
 import dev.miguelehr.truequeropa.ui.screens.ProposeTradeScreen
+import dev.miguelehr.truequeropa.ui.screens.PublicationPostsOffersScreen
 import dev.miguelehr.truequeropa.ui.screens.PublicationPostsScreen
 import dev.miguelehr.truequeropa.ui.screens.TradeHistoryScreen
 import dev.miguelehr.truequeropa.ui.screens.UserRequestsScreen
@@ -59,6 +60,7 @@ sealed class Route(val path: String) {
     data object Proposals : Route("home/proposals")
     data object UserRequests : Route("home/requests")
     data object UserPostsRequests : Route("publicationPosts/{userId}/{postIdSol}/{requestId}")
+    data object UserPostsOffers : Route("publicationPostsOffers/{userId}/{postIdProp}")
     data object History : Route("home/history")
 
     // Detalle de producto ← NUEVO
@@ -271,9 +273,14 @@ fun AppNav(navController: NavHostController = rememberNavController()) {
                 ProductDetailScreen(
                     postId = postId,
                     onBack = { navController.popBackStack() },
-                    onProponerTrueque = { postId, ownerId ->
-                        // TODO: Navegar a pantalla de proponer trueque
-                        navController.popBackStack()
+                    onProponerTrueque = { ownerId,postId ->
+                        val route = Route.UserPostsOffers.path
+                            .replace("{userId}", ownerId)
+                            .replace("{postIdProp}", postId)
+                        navController.navigate(route)
+
+
+                       // navController.popBackStack()
                     },
                     onVerPerfil = { userId ->
                         navController.navigate(Route.ProfileById.with(userId))
@@ -322,6 +329,25 @@ fun AppNav(navController: NavHostController = rememberNavController()) {
                         requestId = requestId,
                         onNavigateToRequestDetails = {
                             navController.navigate(Route.UserRequests.path)
+                        },
+                        onBack = {
+                            navController.popBackStack()
+                        }
+                    )
+                }
+            }
+
+            composable(Route.UserPostsOffers.path) { backStackEntry ->
+                val userId = backStackEntry.arguments?.getString("userId") ?: ""
+                val postIdProp = backStackEntry.arguments?.getString("postIdProp") ?: ""
+                val currentUserId = FirebaseAuthManager.currentUserId()
+
+                if (currentUserId != null) {
+                    PublicationPostsOffersScreen(
+                        userId = userId,
+                        postIdProp = postIdProp,
+                        onNavigateToOffers = {
+                            navController.navigate(Route.Offers.path)
                         },
                         onBack = {
                             navController.popBackStack()

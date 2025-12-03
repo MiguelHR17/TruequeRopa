@@ -211,7 +211,8 @@ fun UserRequestItem(
                     Text("Tu prenda:", fontWeight = FontWeight.Medium)
                     Spacer(Modifier.height(4.dp))
                     Image(
-                        painter = rememberAsyncImagePainter(generateImageUrl(details.propietarioPost.categoria,2)),
+                       // painter = rememberAsyncImagePainter(generateImageUrl(details.propietarioPost.categoria,2)),
+                        painter = rememberAsyncImagePainter(details.propietarioPost.imageUrls ),
                         contentDescription = details.propietarioPost.descripcion,
                         contentScale = ContentScale.Crop,
                         modifier = Modifier
@@ -244,7 +245,8 @@ fun UserRequestItem(
 
                     Spacer(Modifier.height(4.dp))
                     Image(
-                        painter = rememberAsyncImagePainter(generateImageUrl(details.solicitantePost.categoria,1)),
+                        //painter = rememberAsyncImagePainter(generateImageUrl(details.solicitantePost.categoria,1)),
+                        painter = rememberAsyncImagePainter(details.solicitantePost.imageUrls ),
                         contentDescription = details.solicitantePost.descripcion,
                         contentScale = ContentScale.Crop,
                         modifier = Modifier

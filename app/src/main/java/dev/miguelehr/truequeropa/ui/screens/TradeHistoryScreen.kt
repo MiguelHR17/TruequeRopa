@@ -1,6 +1,7 @@
 package dev.miguelehr.truequeropa.ui.screens
 
 import android.R.attr.padding
+import android.annotation.SuppressLint
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -73,6 +74,7 @@ fun TradeHistoryScreen(
     }
 }
 
+@SuppressLint("SuspiciousIndentation")
 @Composable
 fun HistoryUserRequestItem(details: UserRequestDetails, isExpanded: Boolean) {
 
