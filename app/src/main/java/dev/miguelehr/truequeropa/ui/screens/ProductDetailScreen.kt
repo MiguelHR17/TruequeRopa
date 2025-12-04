@@ -310,7 +310,7 @@ fun ProductDetailScreen(
 
                     // Botón de proponer trueque
                     Button(
-                        onClick = { onProponerTrueque(postId, p.userId) },
+                        onClick = { onProponerTrueque(p.userId,postId) },
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Text("Proponer Trueque")

@@ -114,32 +114,28 @@ object FirestoreManager {
             .addOnFailureListener { e -> onComplete(false, e.localizedMessage) }
     }
 
-    fun createUserRequest(
-        solicitudId : String,
-        userIdPropietario : String,
-        userIdSolicitante : String,
-        prendaIdPropietario : String,
-        prendaIdSolicitante : String,
-        fechaAprobacion : Timestamp,
+     fun createUserRequest(
+        postIdPropietario : String,
+        postIdSolicitante : String,
         estado : String,
-        onComplete: (Boolean, String?) -> Unit
-    )
-    {
-        val data = hashMapOf(
-            "solicitudId" to solicitudId,
-            "userIdPropietario" to userIdPropietario,
-            "userIdSolicitante" to userIdSolicitante,
-            "prendaIdPropietario" to prendaIdPropietario,
-            "prendaIdSolicitante" to prendaIdSolicitante,
-            "fechaAprobacion" to fechaAprobacion,
-            "estado" to estado,
-            "createdAt" to FieldValue.serverTimestamp()
-        )
+        onComplete: (Boolean) -> Unit
+    ): Boolean {
+        return try {
+            val data = hashMapOf(
+                "postIdPropietario" to postIdPropietario,
+                "postIdSolicitante" to postIdSolicitante,
+                "estado" to estado,
+                "createdAt" to FieldValue.serverTimestamp()
+            )
 
-        db.collection("request")
-            .add(data)
-            .addOnSuccessListener { onComplete(true, null) }
-            .addOnFailureListener { e -> onComplete(false, e.localizedMessage) }
+            db.collection("request")
+                .add(data)
+                .addOnSuccessListener { onComplete(true ) }
+                .addOnFailureListener { e -> onComplete(false) }
+            true
+        } catch (e: Exception) {
+            false
+        }
     }
 
     suspend fun UpdateEstadoUserRequest(
