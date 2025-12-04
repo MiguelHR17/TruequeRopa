@@ -1,6 +1,5 @@
 package dev.miguelehr.truequeropa.ui.screens
 
-import android.text.Selection
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.Image
@@ -12,6 +11,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.calculateEndPadding
+import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -36,6 +37,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -49,17 +51,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.rememberAsyncImagePainter
-import dev.miguelehr.truequeropa.model.FakeRepository.generateImageUrl
-import dev.miguelehr.truequeropa.model.ProposalStatus
-import dev.miguelehr.truequeropa.model.UserProfile
 import dev.miguelehr.truequeropa.model.UserRequestDetails
 import dev.miguelehr.truequeropa.ui.viewmodels.UserRequestsViewModel
 import kotlinx.coroutines.launch
-
 
 @Composable
 fun UserRequestsScreen(
@@ -74,85 +71,170 @@ fun UserRequestsScreen(
     }
 
     val userRequests by viewModel.userRequests.collectAsState()
-    var expandedIds by remember { mutableStateOf(setOf<Int>()) }
+
+    // usamos el id de la request como clave
+    var expandedIds by remember { mutableStateOf(setOf<String>()) }
     val scope = rememberCoroutineScope()
 
-    LaunchedEffect(userRequests) {
-       onUnreviewedCountChange(userRequests.count())
+    // diálogo para mostrar correo al aceptar
+    var contactEmail by remember { mutableStateOf<String?>(null) }
+
+    // Solo propuestas donde yo soy el propietario
+    val incomingRequests = remember(userRequests, userId) {
+        userRequests.filter { it.propietarioProfile.uid == userId }
     }
+
+    val pendingRequests = incomingRequests.filter { it.request.estado == "0" }
+    val attendedRequests = incomingRequests.filter { it.request.estado != "0" }
+
+    // globito rojo = solo pendientes
+    LaunchedEffect(pendingRequests) {
+        onUnreviewedCountChange(pendingRequests.size)
+    }
+
     val bottomPad = padding.calculateBottomPadding() + 96.dp
-    LazyColumn(
+
+    Column(
         modifier = Modifier
-            .padding(horizontal = 12.dp)
-            .padding(top = padding.calculateTopPadding())
-            .fillMaxSize(),
-        contentPadding = PaddingValues(bottom = bottomPad),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-
-    ) {
-
-        item {
-            Text(
-                "Propuesta de Intercambio",
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(top = 6.dp)
+            .padding(
+                start = padding.calculateStartPadding(androidx.compose.ui.unit.LayoutDirection.Ltr),
+                end = padding.calculateEndPadding(androidx.compose.ui.unit.LayoutDirection.Ltr),
+                top = padding.calculateTopPadding(),
+                bottom = bottomPad
             )
-        }
+            .fillMaxSize()
+    ) {
+        Text(
+            "Propuesta de Intercambio",
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+        )
 
-        itemsIndexed(userRequests, key = { index, _ -> index }) { index, details ->
-            val isExpanded = index in expandedIds
-                UserRequestItem(
-                    details = details,
-                    isExpanded = isExpanded,
-                    onToggle = {
-                        expandedIds = if (isExpanded) {
-                            expandedIds - index
-                        } else {
-                            expandedIds + index
-                        }
-                    },
-
-                    onAccept = {
-
-                        scope.launch {
-
-                            viewModel.acceptRequest(
-                                details.request.id,
-                                details.propietarioProfile.uid
-                            )
-                            viewModel.fetchUserRequests(userId, 0)
-                        }
-                        // Colapsa la tarjeta después de la acción
-                        expandedIds = expandedIds - index
-                    },
-                    onReject = {
-
+        if (incomingRequests.isEmpty()) {
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
+                Text("Aún no tienes propuestas de trueque.")
+            }
+        } else {
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                // ======= PENDIENTES =======
+                items(pendingRequests, key = { it.request.id }) { details ->
+                    val isExpanded = expandedIds.contains(details.request.id)
+                    UserRequestItem(
+                        details = details,
+                        isExpanded = isExpanded,
+                        onToggle = {
+                            expandedIds =
+                                if (isExpanded) expandedIds - details.request.id
+                                else expandedIds + details.request.id
+                        },
+                        onAccept = {
+                            scope.launch {
+                                viewModel.acceptRequest(
+                                    details.request.id,
+                                    details.propietarioProfile.uid
+                                )
+                                viewModel.fetchUserRequests(userId, 0)
+                                contactEmail = details.solicitanteProfile.email
+                            }
+                            expandedIds = expandedIds - details.request.id
+                        },
+                        onReject = {
                             scope.launch {
                                 viewModel.updPost(details.propietarioPost.id, "0")
                                 viewModel.updPost(details.solicitantePost.id, "0")
-                                viewModel.rejectRequest(details.request.id, details.propietarioProfile.uid)
+                                viewModel.rejectRequest(
+                                    details.request.id,
+                                    details.propietarioProfile.uid
+                                )
                                 viewModel.fetchUserRequests(userId, 0)
                             }
+                            expandedIds = expandedIds - details.request.id
+                        },
+                        onNavigateToUserPosts = {
+                            onNavigateToUserPosts(
+                                details.solicitanteProfile.uid,
+                                details.solicitantePost.id.toString(),
+                                details.request.id.toString()
+                            )
+                        }
+                    )
+                }
 
+                // ======= YA ATENDIDAS =======
+                if (attendedRequests.isNotEmpty()) {
+                    item {
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceVariant
+                            )
+                        ) {
+                            Column(Modifier.padding(12.dp)) {
+                                Text(
+                                    "Propuestas ya atendidas",
+                                    style = MaterialTheme.typography.titleMedium
+                                )
+                                Spacer(Modifier.height(8.dp))
 
-
-                        // Colapsa la tarjeta después de la acción
-                        expandedIds = expandedIds - index
-                    },
-                    onNavigateToUserPosts = {
-                        onNavigateToUserPosts(details.solicitanteProfile.uid,details.solicitantePost.id.toString(),details.request.id.toString())
+                                attendedRequests.forEach { details ->
+                                    val isExpanded =
+                                        expandedIds.contains(details.request.id)
+                                    UserRequestItem(
+                                        details = details,
+                                        isExpanded = isExpanded,
+                                        onToggle = {
+                                            expandedIds =
+                                                if (isExpanded) expandedIds - details.request.id
+                                                else expandedIds + details.request.id
+                                        },
+                                        onAccept = {},   // ya no se usan
+                                        onReject = {},
+                                        onNavigateToUserPosts = {}
+                                    )
+                                    Spacer(Modifier.height(8.dp))
+                                }
+                            }
+                        }
                     }
-                )
+                }
+            }
         }
 
+        // ===== diálogo de contacto al aceptar =====
+        val email = contactEmail
+        if (email != null) {
+            androidx.compose.material3.AlertDialog(
+                onDismissRequest = { contactEmail = null },
+                title = { Text("Propuesta aceptada") },
+                text = {
+                    Text(
+                        "Ponte en contacto con esta persona para coordinar el intercambio:\n\n$email"
+                    )
+                },
+                confirmButton = {
+                    TextButton(onClick = { contactEmail = null }) {
+                        Text("Cerrar")
+                    }
+                }
+            )
+        }
     }
 }
+
 @Composable
 fun UserRequestItem(
     details: UserRequestDetails,
     isExpanded: Boolean,
-    onToggle: () -> Unit ,
+    onToggle: () -> Unit,
     onAccept: () -> Unit,
     onReject: () -> Unit,
     onNavigateToUserPosts: () -> Unit
@@ -160,34 +242,33 @@ fun UserRequestItem(
     ElevatedCard(
         colors = CardDefaults.elevatedCardColors(
             containerColor = when (details.request.estado) {
-                "0" -> Color(0xFFC5E1A5)    // verde suave
-                "1" -> Color(0xFFD4EDDA)    // verde suave
-                "2" -> Color(0xFFF8D7DA)   // rojo suave
+                "0" -> Color(0xFFC5E1A5)          // pendiente (verde suave)
+                "1", "2" -> Color(0xFFF8D7DA)     // ✅❌ atendida → rojo suave
                 else -> MaterialTheme.colorScheme.surfaceVariant
             }
         ),
         modifier = Modifier
             .fillMaxWidth()
-            .animateContentSize() // ⬅️ expansión sin scroll interno
+            .animateContentSize()
     ) {
-        Column(modifier = Modifier
-            .fillMaxWidth()
-            .padding(12.dp)) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp)
+        ) {
 
             Row(
                 Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
-            )
-
-            {
+            ) {
                 Text(
                     "${details.solicitanteProfile.nombre} quiere intercambiar contigo",
-                    fontWeight = FontWeight.SemiBold,
+                    fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
                     modifier = Modifier.weight(1f)
                 )
 
-                // Punto rojo si “Aún no revisado” y la card está colapsada
-                if (!details.request.reviewed && !isExpanded) {
+                // Punto rojo solo si está pendiente y colapsada
+                if (details.request.estado == "0" && !isExpanded) {
                     Box(
                         modifier = Modifier
                             .size(10.dp)
@@ -196,43 +277,57 @@ fun UserRequestItem(
                     Spacer(Modifier.width(8.dp))
                 }
 
-                IconButton(
-                    onClick = onToggle
-                ) {
+                IconButton(onClick = onToggle) {
                     Icon(
-                        imageVector = if (isExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                        imageVector = if (isExpanded)
+                            Icons.Default.KeyboardArrowUp
+                        else
+                            Icons.Default.KeyboardArrowDown,
                         contentDescription = null
                     )
                 }
             }
 
             AnimatedVisibility(isExpanded) {
-                Column(Modifier.fillMaxWidth().padding(top = 8.dp)) {
-                    Text("Tu prenda:", fontWeight = FontWeight.Medium)
-                    Spacer(Modifier.height(4.dp))
-                    Image(
-                       // painter = rememberAsyncImagePainter(generateImageUrl(details.propietarioPost.categoria,2)),
-                        painter = rememberAsyncImagePainter(details.propietarioPost.imageUrls ),
-                        contentDescription = details.propietarioPost.descripcion,
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(140.dp)
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(Color.LightGray, RoundedCornerShape(12.dp))
+                Column(
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(top = 8.dp)
+                ) {
+
+                    // ========= Tu prenda =========
+                    Text(
+                        "Tu prenda:",
+                        fontWeight = androidx.compose.ui.text.font.FontWeight.Medium
                     )
+                    Spacer(Modifier.height(4.dp))
+
+                    val ownerImageUrl = details.propietarioPost.imageUrls.firstOrNull()
+                    if (ownerImageUrl != null) {
+                        Image(
+                            painter = rememberAsyncImagePainter(ownerImageUrl),
+                            contentDescription = details.propietarioPost.descripcion,
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(140.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(Color.LightGray, RoundedCornerShape(12.dp))
+                        )
+                    }
                     Text(details.propietarioPost.titulo)
 
                     Spacer(Modifier.height(12.dp))
 
+                    // ========= Prenda del solicitante =========
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically, // Alinea el texto y el botón verticalmente
-                        horizontalArrangement = Arrangement.SpaceBetween // Empuja el texto a la izquierda y el botón a la derecha
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Text(
                             text = "Prenda de ${details.solicitanteProfile.nombre}:",
-                            fontWeight = FontWeight.Medium
+                            fontWeight = androidx.compose.ui.text.font.FontWeight.Medium
                         )
 
                         if (details.request.estado == "0") {
@@ -240,26 +335,28 @@ fun UserRequestItem(
                                 Text("Publicaciones")
                             }
                         }
-
                     }
 
                     Spacer(Modifier.height(4.dp))
-                    Image(
-                        //painter = rememberAsyncImagePainter(generateImageUrl(details.solicitantePost.categoria,1)),
-                        painter = rememberAsyncImagePainter(details.solicitantePost.imageUrls ),
-                        contentDescription = details.solicitantePost.descripcion,
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(140.dp)
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(Color.LightGray, RoundedCornerShape(12.dp))
-                    )
+
+                    val requesterImageUrl = details.solicitantePost.imageUrls.firstOrNull()
+                    if (requesterImageUrl != null) {
+                        Image(
+                            painter = rememberAsyncImagePainter(requesterImageUrl),
+                            contentDescription = details.solicitantePost.descripcion,
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(140.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(Color.LightGray, RoundedCornerShape(12.dp))
+                        )
+                    }
                     Text(details.solicitantePost.titulo)
 
                     Spacer(Modifier.height(16.dp))
 
-                    // Acciones
+                    // Botones solo si está pendiente
                     if (details.request.estado == "0") {
                         Row(
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -279,14 +376,15 @@ fun UserRequestItem(
 
                     Spacer(Modifier.height(8.dp))
                     Text(
-                        if (details.request.estado == "1") "✅ Propuesta aceptada"
-                        else if(details.request.estado == "2") "❌ Propuesta rechazada"
-                        else "! Propuesta pendiente",
-                        fontWeight = FontWeight.SemiBold
+                        text = when (details.request.estado) {
+                            "1" -> "✅ Propuesta aceptada"
+                            "2" -> "❌ Propuesta rechazada"
+                            else -> "⚠ Propuesta pendiente"
+                        },
+                        fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold
                     )
                 }
             }
-
         }
     }
 }
