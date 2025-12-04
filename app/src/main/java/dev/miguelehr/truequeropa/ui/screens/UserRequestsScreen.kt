@@ -4,7 +4,6 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -21,7 +20,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -94,6 +92,9 @@ fun UserRequestsScreen(
 
     val bottomPad = padding.calculateBottomPadding() + 96.dp
 
+    // para colapsar/expandir el bloque de “ya atendidas”
+    var attendedExpanded by remember { mutableStateOf(true) }
+
     Column(
         modifier = Modifier
             .padding(
@@ -138,6 +139,10 @@ fun UserRequestsScreen(
                         },
                         onAccept = {
                             scope.launch {
+                                // marcar prendas como usadas
+                                viewModel.updPost(details.propietarioPost.id, "1")
+                                viewModel.updPost(details.solicitantePost.id, "1")
+
                                 viewModel.acceptRequest(
                                     details.request.id,
                                     details.propietarioProfile.uid
@@ -169,7 +174,7 @@ fun UserRequestsScreen(
                     )
                 }
 
-                // ======= YA ATENDIDAS =======
+                // ======= YA ATENDIDAS (COLAPSABLE) =======
                 if (attendedRequests.isNotEmpty()) {
                     item {
                         Card(
@@ -178,29 +183,54 @@ fun UserRequestsScreen(
                                 containerColor = MaterialTheme.colorScheme.surfaceVariant
                             )
                         ) {
-                            Column(Modifier.padding(12.dp)) {
-                                Text(
-                                    "Propuestas ya atendidas",
-                                    style = MaterialTheme.typography.titleMedium
-                                )
-                                Spacer(Modifier.height(8.dp))
-
-                                attendedRequests.forEach { details ->
-                                    val isExpanded =
-                                        expandedIds.contains(details.request.id)
-                                    UserRequestItem(
-                                        details = details,
-                                        isExpanded = isExpanded,
-                                        onToggle = {
-                                            expandedIds =
-                                                if (isExpanded) expandedIds - details.request.id
-                                                else expandedIds + details.request.id
-                                        },
-                                        onAccept = {},   // ya no se usan
-                                        onReject = {},
-                                        onNavigateToUserPosts = {}
+                            Column(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .padding(12.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Text(
+                                        "Propuestas ya atendidas",
+                                        style = MaterialTheme.typography.titleMedium
                                     )
-                                    Spacer(Modifier.height(8.dp))
+                                    IconButton(
+                                        onClick = { attendedExpanded = !attendedExpanded }
+                                    ) {
+                                        Icon(
+                                            imageVector = if (attendedExpanded)
+                                                Icons.Default.KeyboardArrowUp
+                                            else
+                                                Icons.Default.KeyboardArrowDown,
+                                            contentDescription = null
+                                        )
+                                    }
+                                }
+
+                                AnimatedVisibility(attendedExpanded) {
+                                    Column {
+                                        Spacer(Modifier.height(8.dp))
+                                        attendedRequests.forEach { details ->
+                                            val isExpanded =
+                                                expandedIds.contains(details.request.id)
+                                            UserRequestItem(
+                                                details = details,
+                                                isExpanded = isExpanded,
+                                                onToggle = {
+                                                    expandedIds =
+                                                        if (isExpanded) expandedIds - details.request.id
+                                                        else expandedIds + details.request.id
+                                                },
+                                                onAccept = {},   // ya no se usan
+                                                onReject = {},
+                                                onNavigateToUserPosts = {}
+                                            )
+                                            Spacer(Modifier.height(8.dp))
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -243,7 +273,7 @@ fun UserRequestItem(
         colors = CardDefaults.elevatedCardColors(
             containerColor = when (details.request.estado) {
                 "0" -> Color(0xFFC5E1A5)          // pendiente (verde suave)
-                "1", "2" -> Color(0xFFF8D7DA)     // ✅❌ atendida → rojo suave
+                "1", "2" -> Color(0xFFF8D7DA)     // atendida
                 else -> MaterialTheme.colorScheme.surfaceVariant
             }
         ),
@@ -267,7 +297,6 @@ fun UserRequestItem(
                     modifier = Modifier.weight(1f)
                 )
 
-                // Punto rojo solo si está pendiente y colapsada
                 if (details.request.estado == "0" && !isExpanded) {
                     Box(
                         modifier = Modifier
@@ -295,7 +324,6 @@ fun UserRequestItem(
                         .padding(top = 8.dp)
                 ) {
 
-                    // ========= Tu prenda =========
                     Text(
                         "Tu prenda:",
                         fontWeight = androidx.compose.ui.text.font.FontWeight.Medium
@@ -319,7 +347,6 @@ fun UserRequestItem(
 
                     Spacer(Modifier.height(12.dp))
 
-                    // ========= Prenda del solicitante =========
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically,
@@ -356,7 +383,6 @@ fun UserRequestItem(
 
                     Spacer(Modifier.height(16.dp))
 
-                    // Botones solo si está pendiente
                     if (details.request.estado == "0") {
                         Row(
                             horizontalArrangement = Arrangement.spacedBy(8.dp),

@@ -94,12 +94,13 @@ fun OffersScreen(
                         text = { Text("Todas") },
                         onClick = { catFilter = null; catExpanded = false }
                     )
-                    listOf("CAMISA", "PANTALON", "VESTIDO", "CHAQUETA", "ZAPATOS", "ACCESORIO").forEach { cat ->
-                        DropdownMenuItem(
-                            text = { Text(cat) },
-                            onClick = { catFilter = cat; catExpanded = false }
-                        )
-                    }
+                    listOf("CAMISA", "PANTALON", "VESTIDO", "CHAQUETA", "ZAPATOS", "ACCESORIO")
+                        .forEach { cat ->
+                            DropdownMenuItem(
+                                text = { Text(cat) },
+                                onClick = { catFilter = cat; catExpanded = false }
+                            )
+                        }
                 }
             }
 
@@ -156,6 +157,7 @@ fun OffersScreen(
                     CircularProgressIndicator()
                 }
             }
+
             offersState.error != null -> {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -170,11 +172,13 @@ fun OffersScreen(
                     }
                 }
             }
+
             offersState.filteredPosts.isEmpty() -> {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Text("No hay ofertas disponibles")
                 }
             }
+
             else -> {
                 LazyColumn(
                     verticalArrangement = Arrangement.spacedBy(12.dp),
