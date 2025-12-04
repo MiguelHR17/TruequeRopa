@@ -12,14 +12,17 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -29,6 +32,8 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -46,6 +51,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import coil.compose.rememberAsyncImagePainter
+import dev.miguelehr.truequeropa.auth.FirebaseAuthManager
 import dev.miguelehr.truequeropa.data.FirestoreManager
 import dev.miguelehr.truequeropa.model.UserPost
 import dev.miguelehr.truequeropa.model.UserProfile
@@ -65,6 +71,16 @@ fun ProductDetailScreen(
     var error by remember { mutableStateOf<String?>(null) }
 
     val scope = rememberCoroutineScope()
+    val currentUserId = FirebaseAuthManager.currentUserId()
+
+    // Editar descripción
+    var showEditDescDialog by remember { mutableStateOf(false) }
+    var editedDescription by remember { mutableStateOf("") }
+    var editingDescription by remember { mutableStateOf(false) }
+
+    // Volver a publicar
+    var showRepublishDialog by remember { mutableStateOf(false) }
+    var republishing by remember { mutableStateOf(false) }
 
     // Cargar post + info de usuario de Firestore
     LaunchedEffect(postId) {
@@ -144,6 +160,10 @@ fun ProductDetailScreen(
             post != null && owner != null -> {
                 val p = post!!
                 val o = owner!!
+
+                val isMyPost = currentUserId != null && p.userId == currentUserId
+                val isUsedInTrade = p.estadoTrueque != "0"
+                val canProposeTrade = !isMyPost && !isUsedInTrade
 
                 Column(
                     modifier = Modifier
@@ -259,6 +279,25 @@ fun ProductDetailScreen(
                         style = MaterialTheme.typography.bodyMedium
                     )
 
+                    // Botón para EDITAR descripción (solo dueño)
+                    if (isMyPost) {
+                        Spacer(Modifier.height(8.dp))
+                        TextButton(
+                            onClick = {
+                                editedDescription = p.descripcion
+                                showEditDescDialog = true
+                            }
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Edit,
+                                contentDescription = "Editar descripción",
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(Modifier.width(4.dp))
+                            Text("Editar descripción")
+                        }
+                    }
+
                     Spacer(Modifier.height(24.dp))
 
                     // Info del dueño + botón "Ver perfil"
@@ -310,10 +349,27 @@ fun ProductDetailScreen(
 
                     // Botón de proponer trueque
                     Button(
-                        onClick = { onProponerTrueque(p.userId,postId) },
-                        modifier = Modifier.fillMaxWidth()
+                        onClick = {
+                            if (canProposeTrade) {
+                                onProponerTrueque(p.userId, postId)
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        enabled = canProposeTrade
                     ) {
                         Text("Proponer Trueque")
+                    }
+
+                    // Botón de VOLVER A PUBLICAR (solo dueño y usada)
+                    if (isMyPost && isUsedInTrade) {
+                        Spacer(Modifier.height(8.dp))
+                        OutlinedButton(
+                            onClick = { showRepublishDialog = true },
+                            modifier = Modifier.fillMaxWidth(),
+                            enabled = !republishing
+                        ) {
+                            Text("Volver a publicar esta prenda")
+                        }
                     }
                 }
             }
@@ -328,6 +384,111 @@ fun ProductDetailScreen(
                     Text("No se encontró el producto.")
                 }
             }
+        }
+
+        // ===== Diálogo para VOLVER A PUBLICAR desde el detalle =====
+        if (showRepublishDialog && post != null) {
+            AlertDialog(
+                onDismissRequest = {
+                    if (!republishing) showRepublishDialog = false
+                },
+                title = { Text("Volver a publicar") },
+                text = {
+                    Text(
+                        "Esta prenda ya fue utilizada en un trueque aprobado. " +
+                                "¿Quieres volver a publicarla para nuevos intercambios?"
+                    )
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            val currentPost = post!!
+                            republishing = true
+                            scope.launch {
+                                val ok = FirestoreManager.UpdatePost(currentPost.id, "0")
+                                if (ok) {
+                                    post = currentPost.copy(estadoTrueque = "0")
+                                } else {
+                                    error = "No se pudo volver a publicar la prenda"
+                                }
+                                republishing = false
+                                showRepublishDialog = false
+                            }
+                        },
+                        enabled = !republishing
+                    ) {
+                        Text("Volver a publicar")
+                    }
+                },
+                dismissButton = {
+                    TextButton(
+                        onClick = { showRepublishDialog = false },
+                        enabled = !republishing
+                    ) {
+                        Text("Cancelar")
+                    }
+                }
+            )
+        }
+
+        // ===== Diálogo para EDITAR DESCRIPCIÓN =====
+        if (showEditDescDialog && post != null) {
+            AlertDialog(
+                onDismissRequest = {
+                    if (!editingDescription) showEditDescDialog = false
+                },
+                title = { Text("Editar descripción") },
+                text = {
+                    Column {
+                        Text(
+                            "Modifica la descripción de tu prenda:",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        OutlinedTextField(
+                            value = editedDescription,
+                            onValueChange = { editedDescription = it },
+                            modifier = Modifier.fillMaxWidth(),
+                            minLines = 3,
+                            maxLines = 5
+                        )
+                    }
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            val currentPost = post!!
+                            val newDesc = editedDescription.trim()
+                            if (newDesc.isBlank()) return@TextButton
+                            editingDescription = true
+                            scope.launch {
+                                val ok = FirestoreManager.updatePostDescription(
+                                    currentPost.id,
+                                    newDesc
+                                )
+                                if (ok) {
+                                    post = currentPost.copy(descripcion = newDesc)
+                                } else {
+                                    error = "No se pudo actualizar la descripción"
+                                }
+                                editingDescription = false
+                                showEditDescDialog = false
+                            }
+                        },
+                        enabled = !editingDescription && editedDescription.isNotBlank()
+                    ) {
+                        Text("Guardar")
+                    }
+                },
+                dismissButton = {
+                    TextButton(
+                        onClick = { showEditDescDialog = false },
+                        enabled = !editingDescription
+                    ) {
+                        Text("Cancelar")
+                    }
+                }
+            )
         }
     }
 }
