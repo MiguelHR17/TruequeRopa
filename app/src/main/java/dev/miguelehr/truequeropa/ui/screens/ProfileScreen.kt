@@ -211,41 +211,19 @@ fun ProfileScreen(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
-                if (lastName.isNotBlank()) {
+                if (isMe && lastName.isNotBlank()) {
                     Text(
                         text = "Apellido: $lastName",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-                Text(
-                    text = "Correo: ${user.email}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-
-            if (isMe) {
-                ElevatedButton(
-                    onClick = {
-                        if (!uploadingPhoto) {
-                            photoPickerLauncher.launch("image/*")
-                        }
-                    }
-                ) {
-                    if (uploadingPhoto) {
-                        CircularProgressIndicator(
-                            strokeWidth = 2.dp,
-                            modifier = Modifier.size(16.dp)
-                        )
-                    } else {
-                        androidx.compose.material3.Icon(
-                            imageVector = Icons.Filled.Edit,
-                            contentDescription = null
-                        )
-                        Spacer(Modifier.width(6.dp))
-                        Text("Editar foto")
-                    }
+                if (isMe) {
+                    Text(
+                        text = "Correo: ${user.email}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
         }

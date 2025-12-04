@@ -1,38 +1,34 @@
 package dev.miguelehr.truequeropa.ui.screens
 
-import androidx.activity.result.launch
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.IntrinsicSize
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.AssistChip
-import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -43,202 +39,266 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.rememberAsyncImagePainter
-import dev.miguelehr.truequeropa.auth.FirebaseMockLinker
-import dev.miguelehr.truequeropa.model.FakeRepository.generateImageUrl
+import dev.miguelehr.truequeropa.auth.FirebaseAuthManager
+import dev.miguelehr.truequeropa.data.FirestoreManager
 import dev.miguelehr.truequeropa.model.UserPostsDetails
-import dev.miguelehr.truequeropa.model.UserProfile
-import dev.miguelehr.truequeropa.ui.viewmodels.UserRequestsViewModel
 import kotlinx.coroutines.launch
 
+/**
+ * Pantalla donde el USUARIO ACTUAL elige una de SUS publicaciones
+ * para ofrecer en trueque por la prenda de otra persona.
+ *
+ * @param userId       Id del dueño de la publicación destino (receptor del trueque)
+ * @param postIdProp   Id de la publicación del receptor (la que viste en el detalle)
+ */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PublicationPostsOffersScreen(
-    userId: String,
-    postIdProp: String,
+    userId: String,        // dueño de la prenda objetivo (receptor)
+    postIdProp: String,    // post del receptor
     onNavigateToOffers: () -> Unit,
-    onBack: () -> Unit,
-    vm: UserRequestsViewModel = viewModel()
+    onBack: () -> Unit
 ) {
+    val currentUserId = FirebaseAuthManager.currentUserId()
 
-    val userPosts by vm.userPosts.collectAsState()
-    var selectedPostId by remember { mutableStateOf<String?>(null) }
-    var showDialogForPost by remember { mutableStateOf<String?>(null) }
-    var userPropietario by remember { mutableStateOf<UserProfile?>(null) }
+    // Si por algún motivo no hay usuario logueado, salimos
+    if (currentUserId == null) {
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center
+        ) {
+            Text("Debes iniciar sesión para proponer un trueque.")
+        }
+        return
+    }
+
+    var loading by remember { mutableStateOf(true) }
+    var error by remember { mutableStateOf<String?>(null) }
+    var myPosts by remember { mutableStateOf<List<UserPostsDetails>>(emptyList()) }
+    var selectedPost by remember { mutableStateOf<UserPostsDetails?>(null) }
+    var showResultDialog by remember { mutableStateOf(false) }
+    var resultMessage by remember { mutableStateOf("") }
+
     val scope = rememberCoroutineScope()
 
-    LaunchedEffect(userId) {
-        userPropietario = vm.selUser(userId)
+    // Cargar SOLO publicaciones del usuario actual
+    LaunchedEffect(currentUserId) {
+        loading = true
+        error = null
+        try {
+            // Solo prendas disponibles (estadoTrueque == "0")
+            myPosts = FirestoreManager.getAllUserPostDetailsForUser(currentUserId)
+        } catch (e: Exception) {
+            error = e.localizedMessage ?: "Error al cargar tus publicaciones."
+        } finally {
+            loading = false
+        }
     }
 
-    showDialogForPost?.let { postId ->
-        AlertDialog(
-            onDismissRequest = {
-                showDialogForPost = null
-            },
-            title = { Text("Confirmar selección") },
-            text = { Text("¿Deseas seleccionar esta prenda para el trueque?") },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-
-                        scope.launch {
-                            vm.launchCreateRequest  (postIdProp,postId,"0"){ success ->
-                                if (success) {
-                                    scope.launch {
-                                        FirebaseMockLinker.syncCurrentUserIntoMock()
-
-                                        // 3. Llama a las funciones suspend AHORA, después del éxito.
-                                        vm.updPost(postId, "1")
-                                        vm.updPost(postIdProp, "1")
-
-                                        // 4. Navega solo si todo lo anterior funcionó.
-                                        onNavigateToOffers()
-                                    }
-                                } else {
-                                    // Lógica para cuando falla
-                                }
-                            }
-
-
-                        }
-
-                        // Cerramos el diálogo después de navegar.
-                        showDialogForPost = null
+    Scaffold(
+        topBar = {
+            androidx.compose.material3.TopAppBar(
+                title = { Text("Elige una prenda") },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(
+                            imageVector = Icons.Filled.ArrowBack,
+                            contentDescription = "Volver"
+                        )
                     }
-                ) {
-                    Text("Aceptar")
                 }
-            },
-            dismissButton = {
-                TextButton(
-                    onClick = {
-                        // Si el usuario cancela, simplemente cerramos el diálogo.
-                        showDialogForPost = null
-                        onBack()
+            )
+        }
+    ) { padding ->
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .padding(16.dp)
+        ) {
+            when {
+                loading -> {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator()
                     }
-                ) {
-                    Text("Cancelar")
+                }
+
+                error != null -> {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(error ?: "Ocurrió un error.")
+                    }
+                }
+
+                myPosts.isEmpty() -> {
+                    // No tiene publicaciones disponibles
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "No tienes publicaciones disponibles para ofrecer.\n" +
+                                    "Primero crea una publicación en tu perfil.",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
+                }
+
+                else -> {
+                    Column(modifier = Modifier.fillMaxSize()) {
+                        Text(
+                            text = "Selecciona cuál de tus prendas quieres ofrecer en trueque.",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                        Spacer(Modifier.height(12.dp))
+
+                        LazyColumn(
+                            verticalArrangement = Arrangement.spacedBy(12.dp),
+                            modifier = Modifier.fillMaxSize()
+                        ) {
+                            items(myPosts) { details ->
+                                val post = details.solicitantePost  // así se llama en tu modelo
+                                PublicationOfferCard(
+                                    title = post.titulo,
+                                    description = post.descripcion,
+                                    imageUrls = post.imageUrls,
+                                    onClick = { selectedPost = details }
+                                )
+                            }
+                        }
+                    }
                 }
             }
-        )
-    }
 
-    LaunchedEffect(userId) {
-        vm.fetchUserPosts(userId)
-    }
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(horizontal = 16.dp)
-    ) {
-        Spacer(Modifier.height(24.dp))
-        Text(
-            text = "Prendas de ${userPropietario?.nombre?.uppercase()}:",
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Medium
-        )
-        Spacer(Modifier.height(16.dp))
-        LazyColumn(
-            modifier = Modifier.weight(1f, fill = false),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
+            // Diálogo de confirmación de envío de propuesta
+            val postToOffer = selectedPost
+            if (postToOffer != null) {
+                val myPost = postToOffer.solicitantePost
 
-            items(userPosts) { postDetails ->
-
-                PostItemOffer(
-                    postDetails = postDetails,
-                    isSelected = postDetails.solicitantePost.id == selectedPostId,
-                    onItemClick = {
-
-                        selectedPostId = if (selectedPostId == postDetails.solicitantePost.id) {
-                            null
-                        } else {
-                            postDetails.solicitantePost.id
+                AlertDialog(
+                    onDismissRequest = { selectedPost = null },
+                    title = { Text("Confirmar trueque") },
+                    text = {
+                        Text(
+                            "¿Quieres ofrecer \"${myPost.titulo}\" a cambio de la prenda seleccionada?\n\n" +
+                                    "Esta propuesta será enviada al dueño de la publicación."
+                        )
+                    },
+                    confirmButton = {
+                        TextButton(
+                            onClick = {
+                                // Enviamos la propuesta a Firestore
+                                scope.launch {
+                                    try {
+                                        FirestoreManager.createUserRequest(
+                                            postIdPropietario = postIdProp,           // prenda del receptor
+                                            postIdSolicitante = myPost.id,            // tu prenda
+                                            estado = "0"                              // pendiente
+                                        ) { ok ->
+                                            if (ok) {
+                                                resultMessage =
+                                                    "Tu propuesta de trueque fue enviada correctamente."
+                                            } else {
+                                                resultMessage =
+                                                    "Ocurrió un problema al enviar la propuesta."
+                                            }
+                                            showResultDialog = true
+                                        }
+                                    } catch (e: Exception) {
+                                        resultMessage =
+                                            "Error al enviar la propuesta: ${e.localizedMessage}"
+                                        showResultDialog = true
+                                    } finally {
+                                        selectedPost = null
+                                    }
+                                }
+                            }
+                        ) {
+                            Text("Confirmar")
                         }
-                        showDialogForPost = postDetails.solicitantePost.id
-                        //onNavigateToRequestDetails(userId )
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { selectedPost = null }) {
+                            Text("Cancelar")
+                        }
                     }
                 )
             }
-            item { Spacer(Modifier.height(8.dp)) }
+
+            // Diálogo final informando resultado y volviendo a Ofertas
+            if (showResultDialog) {
+                AlertDialog(
+                    onDismissRequest = {
+                        showResultDialog = false
+                        onNavigateToOffers()
+                    },
+                    title = { Text("Propuesta de trueque") },
+                    text = { Text(resultMessage) },
+                    confirmButton = {
+                        TextButton(
+                            onClick = {
+                                showResultDialog = false
+                                onNavigateToOffers()
+                            }
+                        ) {
+                            Text("Aceptar")
+                        }
+                    }
+                )
+            }
         }
-        Spacer(Modifier.height(16.dp))
     }
 }
 
-/**
- * Un Composable para mostrar la información de un solo post.
- * Puedes personalizarlo como quieras.
- */
 @Composable
-fun PostItemOffer(
-    postDetails: UserPostsDetails,
-    isSelected: Boolean, // <-- Recibe si está seleccionado
-    onItemClick: () -> Unit // <-- Recibe la acción de clic
+private fun PublicationOfferCard(
+    title: String,
+    description: String,
+    imageUrls: List<String>,
+    onClick: () -> Unit
 ) {
-
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable {
-                onItemClick()
-            } ,
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
-        border = if (isSelected) {
-            BorderStroke(2.dp, MaterialTheme.colorScheme.primary)
-        } else {
-            null
-        },
-        colors = if (isSelected) {
-            CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
-        } else {
-            CardDefaults.cardColors()
-        }
-    ) {
-        Row(
-            modifier = Modifier
-                .padding(12.dp)
-                .height(IntrinsicSize.Min),
-            verticalAlignment = Alignment.CenterVertically
+            .clickable { onClick() },
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant
         )
-        {
-            Image(
-               // painter = rememberAsyncImagePainter(generateImageUrl(postDetails.solicitantePost.categoria,1)),
-                painter = rememberAsyncImagePainter(postDetails.solicitantePost.imageUrls),
-                contentDescription = postDetails.solicitantePost.descripcion,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier
-                    .fillMaxHeight()
-                    .width(90.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(Color.LightGray)
-            )
-            Spacer(Modifier.width(16 .dp))
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                Text(
-                    text = postDetails.solicitantePost.titulo.uppercase(),
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
+    ) {
+        Column(Modifier.padding(12.dp)) {
+            val firstImage = imageUrls.firstOrNull()
+            if (firstImage != null) {
+                Image(
+                    painter = rememberAsyncImagePainter(firstImage),
+                    contentDescription = title,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(140.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(Color.LightGray, RoundedCornerShape(12.dp)),
+                    contentScale = ContentScale.Crop
                 )
-                Text(
-                    "${postDetails.solicitantePost.categoria} • Talla ${postDetails.solicitantePost.talla}",
-                    style = MaterialTheme.typography.bodySmall
-                )
-                Text(
-                    text = "Descripción: ${postDetails.solicitantePost.descripcion} ",
-                    style = MaterialTheme.typography.bodyMedium,
-                    maxLines = 2
-                )
-
-                AssistChip(onClick = {}, label = { Text("Estado: ${postDetails.solicitantePost.estado}") })
-
+                Spacer(Modifier.height(8.dp))
             }
+
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleMedium
+            )
+            Spacer(Modifier.height(4.dp))
+            Text(
+                text = description,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 3
+            )
         }
     }
 }

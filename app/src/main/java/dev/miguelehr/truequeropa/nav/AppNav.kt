@@ -23,6 +23,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavGraph.Companion.findStartDestination
@@ -63,7 +65,7 @@ sealed class Route(val path: String) {
     data object UserPostsOffers : Route("publicationPostsOffers/{userId}/{postIdProp}")
     data object History : Route("home/history")
 
-    // Detalle de producto ← NUEVO
+    // Detalle de producto
     data object ProductDetail : Route("product/{postId}") {
         fun with(postId: String) = "product/$postId"
     }
@@ -75,14 +77,14 @@ sealed class Route(val path: String) {
     data object ProfileById : Route("profile/{userId}?pin={pin}") {
         fun with(userId: String, pin: String? = null): String {
             return if (pin.isNullOrBlank()) {
-                "profile/$userId"  // ✅ Sin el ?pin= cuando no hay pin
+                "profile/$userId"
             } else {
                 "profile/$userId?pin=$pin"
             }
         }
     }
 
-    // Trueque
+    // Trueque (ruta genérica si la sigues usando)
     data object ProposeTrade : Route("trade/propose/{productId}") {
         fun with(id: String) = "trade/propose/$id"
     }
@@ -171,10 +173,12 @@ fun AppNav(navController: NavHostController = rememberNavController()) {
                             )
                         }
                     }
-                    // Menú de cuenta
+
+                    // Menú de cuenta (alineado a la derecha)
                     DropdownMenu(
                         expanded = showAccountMenu,
                         onDismissRequest = { showAccountMenu = false },
+                        modifier = Modifier.align(Alignment.TopEnd),
                         offset = DpOffset(0.dp, (-8).dp)
                     ) {
                         DropdownMenuItem(
@@ -233,7 +237,6 @@ fun AppNav(navController: NavHostController = rememberNavController()) {
             composable(Route.Register.path) {
                 AuthRegisterScreen(
                     onRegistered = {
-                        // Después de registrarse, lo mandas al login
                         FirebaseAuthManager.signOut()
                         navController.navigate(Route.Login.path) {
                             popUpTo(Route.Login.path) { inclusive = true }
@@ -241,7 +244,6 @@ fun AppNav(navController: NavHostController = rememberNavController()) {
                         }
                     },
                     onBackToLogin = {
-                        // Aquí vuelves al login cuando toque "¿Ya tienes cuenta? Inicia sesión"
                         navController.popBackStack()
                     },
                     padding = padding
@@ -251,17 +253,14 @@ fun AppNav(navController: NavHostController = rememberNavController()) {
             // ===== HOME =====
             composable(Route.Offers.path) {
                 OffersScreen(
-                    onOpenProduct = { productId, ownerUserId ->
-                        // Ir al perfil del dueño y fijar esa publicación arriba
+                    onOpenProduct = { productId, _ ->
                         navController.navigate(Route.ProductDetail.with(productId))
                     },
-                    //onOpenUserSearch = { /* callback por compatibilidad si lo necesitas */ },
                     padding = padding
                 )
             }
 
             // ===== DETALLE DE PRODUCTO =====
-
             composable(
                 route = Route.ProductDetail.path,
                 arguments = listOf(
@@ -273,14 +272,11 @@ fun AppNav(navController: NavHostController = rememberNavController()) {
                 ProductDetailScreen(
                     postId = postId,
                     onBack = { navController.popBackStack() },
-                    onProponerTrueque = { ownerId,postId ->
+                    onProponerTrueque = { ownerId, postIdProp ->
                         val route = Route.UserPostsOffers.path
                             .replace("{userId}", ownerId)
-                            .replace("{postIdProp}", postId)
+                            .replace("{postIdProp}", postIdProp)
                         navController.navigate(route)
-
-
-                       // navController.popBackStack()
                     },
                     onVerPerfil = { userId ->
                         navController.navigate(Route.ProfileById.with(userId))
@@ -288,7 +284,7 @@ fun AppNav(navController: NavHostController = rememberNavController()) {
                 )
             }
 
-            // Bandeja de propuestas (si la usas)
+            // Bandeja de propuestas (si la usas para otro flujo)
             composable(Route.Proposals.path) {
                 ProposalsInboxScreen(
                     padding = padding,
@@ -304,18 +300,20 @@ fun AppNav(navController: NavHostController = rememberNavController()) {
                         userId = currentUserId,
                         padding = padding,
                         onUnreviewedCountChange = { requestsBadge = it },
-                        onNavigateToUserPosts = { solicitanteId, postIdSol, requestId ->
-                            val route = Route.UserPostsRequests.path
-                                .replace("{userId}", solicitanteId)
-                                .replace("{postIdSol}", postIdSol)
-                                .replace("{requestId}", requestId)
-                            navController.navigate(route)
+                        onNavigateToUserPosts = { solicitanteId, postIdSol, _ ->
+                            // Ir al perfil de ese usuario, con su publicación fijada
+                            navController.navigate(
+                                Route.ProfileById.with(
+                                    userId = solicitanteId,
+                                    pin = postIdSol
+                                )
+                            )
                         }
                     )
                 }
             }
 
-            // Pantalla que muestra publicaciones del solicitante para responder a una solicitud
+            // (si aún usas esta ruta para otro flujo de respuesta)
             composable(Route.UserPostsRequests.path) { backStackEntry ->
                 val userId = backStackEntry.arguments?.getString("userId") ?: ""
                 val postIdSol = backStackEntry.arguments?.getString("postIdSol") ?: ""
@@ -337,6 +335,7 @@ fun AppNav(navController: NavHostController = rememberNavController()) {
                 }
             }
 
+            // Pantalla para elegir cuál publicación ofrecer en el trueque
             composable(Route.UserPostsOffers.path) { backStackEntry ->
                 val userId = backStackEntry.arguments?.getString("userId") ?: ""
                 val postIdProp = backStackEntry.arguments?.getString("postIdProp") ?: ""
@@ -364,14 +363,13 @@ fun AppNav(navController: NavHostController = rememberNavController()) {
             }
 
             // ===== PERFIL =====
-// Perfil propio
+            // Perfil propio
             composable(Route.Profile.path) {
                 ProfileScreen(
-                    userId = null, // null => actual
-                    pinProductId = null, // sin publicación fijada
+                    userId = null,         // null => actual
+                    pinProductId = null,   // sin publicación fijada
                     onPublish = { navController.navigate(Route.NewProduct.path) },
                     onOpenProduct = { postId ->
-                        // MISMO detalle que se usa en OffersScreen
                         navController.navigate(Route.ProductDetail.with(postId))
                     },
                     padding = padding
@@ -399,7 +397,7 @@ fun AppNav(navController: NavHostController = rememberNavController()) {
                 )
             }
 
-            // ===== TRUEQUE =====
+            // ===== TRUEQUE (ruta genérica si la necesitas) =====
             composable(Route.ProposeTrade.path) { entry ->
                 val id = entry.arguments?.getString("productId") ?: ""
                 ProposeTradeScreen(
@@ -410,14 +408,13 @@ fun AppNav(navController: NavHostController = rememberNavController()) {
 
             // ===== ADMIN =====
             composable(Route.AdminPanel.path) {
-                AdminPanelScreen({navController.popBackStack()})
+                AdminPanelScreen { navController.popBackStack() }
             }
 
             // === PUBLICAR ===
             composable(Route.NewProduct.path) {
                 ProductFormScreen(
                     onSaved = {
-                        // Después de publicar, puedes volver al perfil o a ofertas.
                         navController.popBackStack()
                     },
                     padding = padding
