@@ -347,6 +347,7 @@ fun UserRequestItem(
 
                     Spacer(Modifier.height(12.dp))
 
+                    // ========= Prenda del solicitante =========
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically,
