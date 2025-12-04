@@ -30,13 +30,14 @@ object FirestoreManager {
             "nombre" to nombre,
             "email" to email,
             "createdAt" to FieldValue.serverTimestamp(),
-            "active" to true                // ✅ NUEVO: usuario activo por defecto
+            "active" to true                // ✅ usuario activo por defecto
         )
         db.collection("users").document(uid)
             .set(data)
             .addOnSuccessListener { onComplete(true, null) }
             .addOnFailureListener { onComplete(false, it.localizedMessage) }
     }
+
     // ---------- CREAR PUBLICACIÓN DE USUARIO ----------
     fun createUserPost(
         uid: String,
@@ -60,7 +61,7 @@ object FirestoreManager {
             "estado" to estado,
             "imageUrls" to imageUrls,
             "estadoTrueque" to estadoTrueque,
-            "hidden" to false,                    // ✅ NUEVO: visible por defecto
+            "hidden" to false,                    // ✅ visible por defecto
             "createdAt" to FieldValue.serverTimestamp()
         )
         db.collection("posts")
@@ -96,13 +97,14 @@ object FirestoreManager {
                         imageUrls = (doc.get("imageUrls") as? List<*>)?.filterIsInstance<String>()
                             ?: emptyList(),
                         estadoTrueque = doc.getString("estadoTrueque") ?: "0",
-                        hidden = doc.getBoolean("hidden") ?: false,   // ✅
+                        hidden = doc.getBoolean("hidden") ?: false,
                         createdAt = doc.getTimestamp("createdAt")
                     )
                 } ?: emptyList()
                 onChange(posts, null)
             }
     }
+
     fun deleteUserPost(
         postId: String,
         onComplete: (Boolean, String?) -> Unit
@@ -114,7 +116,7 @@ object FirestoreManager {
             .addOnFailureListener { e -> onComplete(false, e.localizedMessage) }
     }
 
-     fun createUserRequest(
+    fun createUserRequest(
         postIdPropietario : String,
         postIdSolicitante : String,
         estado : String,
@@ -131,7 +133,7 @@ object FirestoreManager {
             db.collection("request")
                 .add(data)
                 .addOnSuccessListener { onComplete(true ) }
-                .addOnFailureListener { e -> onComplete(false) }
+                .addOnFailureListener { _ -> onComplete(false) }
             true
         } catch (e: Exception) {
             false
@@ -141,9 +143,7 @@ object FirestoreManager {
     suspend fun UpdateEstadoUserRequest(
         requestId : String,
         estado : String
-    )
-    {
-
+    ) {
         val requestDoc = db.collection("request").document(requestId)
 
         // Prepara los datos a actualizar
@@ -158,8 +158,7 @@ object FirestoreManager {
     suspend fun UpdatePostSolicitante(
         requestId : String,
         postId: String
-    ): Boolean
-    {
+    ): Boolean {
         return try {
             val requestDoc = db.collection("request").document(requestId)
             val updates = mapOf(
@@ -176,8 +175,7 @@ object FirestoreManager {
     suspend fun UpdatePost(
         postId: String,
         postValue: String
-    ): Boolean
-    {
+    ): Boolean {
         return try {
             val postDoc = db.collection("posts").document(postId)
 
@@ -187,20 +185,35 @@ object FirestoreManager {
             postDoc.update(updates).await()
             true
         } catch (e: Exception) {
-            Log.e("update", "Error al obtener las solicitudes de usuario", e)
+            Log.e("update", "Error al actualizar el estado del post", e)
+            false
+        }
+    }
+
+    // ✅ NUEVO: actualizar sólo la descripción del post
+    suspend fun updatePostDescription(
+        postId: String,
+        newDescription: String
+    ): Boolean {
+        return try {
+            db.collection("posts")
+                .document(postId)
+                .update("descripcion", newDescription)
+                .await()
+            true
+        } catch (e: Exception) {
+            Log.e("FirestoreManager", "Error al actualizar descripción de post", e)
             false
         }
     }
 
     suspend fun getUser(uid: String): UserProfile? {
-
         val propietarioProfileDoc = db.collection("users").document(uid).get().await()
         val propietarioProfile = propietarioProfileDoc.toObject(UserProfile::class.java) ?: return null
-
         return propietarioProfile
     }
 
-    // ➕ NUEVO: actualizar campo photoUrl del usuario
+    // ➕ actualizar campo photoUrl del usuario
     suspend fun updateUserPhoto(uid: String, photoUrl: String): Boolean {
         return try {
             db.collection("users")
@@ -233,7 +246,6 @@ object FirestoreManager {
 
         val propietarioProfileDoc = db.collection("users").document(propietarioPost.userId).get().await()
         val propietarioProfile = propietarioProfileDoc.toObject(UserProfile::class.java) ?: return null
-
 
         return UserRequestDetails(
             requestWithId,
@@ -345,7 +357,7 @@ object FirestoreManager {
             // Log.e(TAG, "Error al obtener las solicitudes de usuario", e)
         }
 
-        return posts.sortedByDescending { it.solicitantePost.createdAt } // .sortedByDescending { it.request.createdAt }
+        return posts.sortedByDescending { it.solicitantePost.createdAt }
     }
 
     suspend fun setUserActive(uid: String, active: Boolean): Boolean {
@@ -385,6 +397,7 @@ object FirestoreManager {
             false
         }
     }
+
     fun ensureUserProfile(
         uid: String,
         email: String?,
@@ -477,7 +490,7 @@ object FirestoreManager {
             Log.d("FirestoreManager", "Buscando usuario: ${post.userId}")
             var userProfile = getUser(post.userId)
 
-            // ✅ Si no existe el usuario, crear uno temporal
+            // Si no existe el usuario, crear uno temporal
             if (userProfile == null) {
                 Log.w("FirestoreManager", "Usuario no encontrado, creando perfil temporal")
                 userProfile = UserProfile(

@@ -307,7 +307,7 @@ fun ProfileScreen(
     }
 }
 
-/* ==== UserPostsSection, UserPostCard y SmallTag se quedan igual ==== */
+/* ==== UserPostsSection, UserPostCard y SmallTag ==== */
 
 @Composable
 fun UserPostsSection(
@@ -322,6 +322,11 @@ fun UserPostsSection(
     var error by remember { mutableStateOf<String?>(null) }
     var deletingId by remember { mutableStateOf<String?>(null) }
     var postToDelete by remember { mutableStateOf<UserPost?>(null) }
+
+    // 🔁 nuevo: volver a publicar
+    var republishingId by remember { mutableStateOf<String?>(null) }
+    var postToRepublish by remember { mutableStateOf<UserPost?>(null) }
+    val scope = rememberCoroutineScope()
 
     if (uidForProfile == null) {
         Box(
@@ -340,7 +345,14 @@ fun UserPostsSection(
                 loading = false
             } else {
                 posts.clear()
-                posts.addAll(list)
+                // ✅ El dueño ve todos sus posts (incluyendo usados)
+                //   Otros sólo ven posts disponibles (estadoTrueque == "0")
+                val visible = if (isOwner) {
+                    list
+                } else {
+                    list.filter { it.estadoTrueque == "0" }
+                }
+                posts.addAll(visible)
                 loading = false
             }
         }
@@ -388,7 +400,9 @@ fun UserPostsSection(
                             post = post,
                             canDelete = isOwner,
                             deleting = deletingId == post.id,
+                            republishing = republishingId == post.id,
                             onDelete = { postToDelete = post },
+                            onRepublish = { postToRepublish = post },
                             onClick = { onOpenProduct(post.id) }
                         )
                     }
@@ -396,6 +410,7 @@ fun UserPostsSection(
             }
         }
 
+        // Diálogo de ELIMINAR
         val toDelete = postToDelete
         if (toDelete != null) {
             AlertDialog(
@@ -433,6 +448,52 @@ fun UserPostsSection(
                 }
             )
         }
+
+        // Diálogo de VOLVER A PUBLICAR
+        val toRepublish = postToRepublish
+        if (toRepublish != null) {
+            AlertDialog(
+                onDismissRequest = {
+                    if (republishingId == null) postToRepublish = null
+                },
+                title = { Text("Volver a publicar") },
+                text = {
+                    Text(
+                        "Esta prenda ya fue utilizada en un trueque aprobado. " +
+                                "¿Deseas volver a publicarla para que aparezca nuevamente en las ofertas?"
+                    )
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            republishingId = toRepublish.id
+                            scope.launch {
+                                val ok = FirestoreManager.UpdatePost(
+                                    toRepublish.id,
+                                    "0" // vuelve a estar disponible
+                                )
+                                if (!ok) {
+                                    error = "No se pudo volver a publicar la prenda"
+                                }
+                                republishingId = null
+                                postToRepublish = null
+                            }
+                        },
+                        enabled = republishingId == null
+                    ) {
+                        Text("Volver a publicar")
+                    }
+                },
+                dismissButton = {
+                    TextButton(
+                        onClick = { postToRepublish = null },
+                        enabled = republishingId == null
+                    ) {
+                        Text("Cancelar")
+                    }
+                }
+            )
+        }
     }
 }
 
@@ -441,15 +502,27 @@ private fun UserPostCard(
     post: UserPost,
     canDelete: Boolean,
     deleting: Boolean,
+    republishing: Boolean,
     onDelete: () -> Unit,
+    onRepublish: () -> Unit,
     onClick: () -> Unit
 ) {
+    val isUsedInTrade = post.estadoTrueque != "0"
+    val cardColor = if (isUsedInTrade) {
+        // 🔴 Tarjeta roja SUAVE para posts usados en trueque (sólo dueño los ve)
+        MaterialTheme.colorScheme.errorContainer
+    } else {
+        MaterialTheme.colorScheme.surfaceVariant
+    }
+
+    val isBusy = deleting || republishing
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .clickable { onClick() },
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant
+            containerColor = cardColor
         )
     ) {
         Column(Modifier.padding(12.dp)) {
@@ -490,6 +563,15 @@ private fun UserPostCard(
                 SmallTag(post.categoria)
             }
 
+            if (isUsedInTrade) {
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    text = "✅ Utilizada en un trueque aprobado",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.error
+                )
+            }
+
             if (canDelete) {
                 Spacer(Modifier.height(8.dp))
                 Row(
@@ -497,9 +579,21 @@ private fun UserPostCard(
                     horizontalArrangement = Arrangement.End,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    // A la izquierda: Volver a publicar (solo si está usada)
+                    if (isUsedInTrade) {
+                        TextButton(
+                            onClick = onRepublish,
+                            enabled = !isBusy
+                        ) {
+                            Text("Volver a publicar")
+                        }
+                        Spacer(Modifier.width(8.dp))
+                    }
+
+                    // A la derecha: Eliminar
                     TextButton(
                         onClick = onDelete,
-                        enabled = !deleting
+                        enabled = !isBusy
                     ) {
                         if (deleting) {
                             CircularProgressIndicator(
