@@ -1,11 +1,12 @@
 package dev.miguelehr.truequeropa.ui.screens
 
-import android.text.Selection
+import android.content.Context
+import android.content.Intent
+import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -19,15 +20,14 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.outlined.Email
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.FilledTonalButton
@@ -49,13 +49,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.core.net.toUri
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.rememberAsyncImagePainter
-import dev.miguelehr.truequeropa.model.FakeRepository.generateImageUrl
-import dev.miguelehr.truequeropa.model.ProposalStatus
-import dev.miguelehr.truequeropa.model.UserProfile
+import dev.miguelehr.truequeropa.R
 import dev.miguelehr.truequeropa.model.UserRequestDetails
 import dev.miguelehr.truequeropa.ui.viewmodels.UserRequestsViewModel
 import kotlinx.coroutines.launch
@@ -142,7 +143,7 @@ fun UserRequestsScreen(
                     },
                     onNavigateToUserPosts = {
                         onNavigateToUserPosts(details.solicitanteProfile.uid,details.solicitantePost.id.toString(),details.request.id.toString())
-                    }
+                    },
                 )
         }
 
@@ -152,11 +153,12 @@ fun UserRequestsScreen(
 fun UserRequestItem(
     details: UserRequestDetails,
     isExpanded: Boolean,
-    onToggle: () -> Unit ,
+    onToggle: () -> Unit,
     onAccept: () -> Unit,
     onReject: () -> Unit,
-    onNavigateToUserPosts: () -> Unit
+    onNavigateToUserPosts: () -> Unit,
 ) {
+    val context = LocalContext.current
     ElevatedCard(
         colors = CardDefaults.elevatedCardColors(
             containerColor = when (details.request.estado) {
@@ -207,7 +209,9 @@ fun UserRequestItem(
             }
 
             AnimatedVisibility(isExpanded) {
-                Column(Modifier.fillMaxWidth().padding(top = 8.dp)) {
+                Column(Modifier
+                    .fillMaxWidth()
+                    .padding(top = 8.dp)) {
                     Text("Tu prenda:", fontWeight = FontWeight.Medium)
                     Spacer(Modifier.height(4.dp))
                     Image(
@@ -278,15 +282,49 @@ fun UserRequestItem(
                     }
 
                     Spacer(Modifier.height(8.dp))
-                    Text(
-                        if (details.request.estado == "1") "✅ Propuesta aceptada"
-                        else if(details.request.estado == "2") "❌ Propuesta rechazada"
-                        else "! Propuesta pendiente",
-                        fontWeight = FontWeight.SemiBold
-                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween // Esto empuja el texto a la izquierda y el botón a la derecha
+                    ) {
+                        Text(
+                            text = if (details.request.estado == "1") "✅ Propuesta aceptada"
+                            else if(details.request.estado == "2") "❌ Propuesta rechazada"
+                            else "! Propuesta pendiente",
+                            fontWeight = FontWeight.SemiBold
+                        )
+
+                        FilledTonalButton(onClick = {
+                        val intent = Intent(Intent.ACTION_SENDTO)
+                        intent.apply {
+                            data = "mailto:".toUri()
+                            putExtra(Intent.EXTRA_EMAIL, arrayOf(details.solicitanteProfile.email))
+                            putExtra(Intent.EXTRA_SUBJECT, "Intercambio de prendas")
+                            putExtra(Intent.EXTRA_TEXT, "Hola ${details.solicitanteProfile.nombre}, me gustaría intercambiar tu prenda ${details.solicitantePost.descripcion}.")
+
+                        }
+                            startIntent(context, intent)
+                        }) {
+                            Icon(Icons.Outlined.Email, contentDescription = null)
+                            Text(stringResource(R.string.intent_email))
+                        }
+
+                    }
                 }
             }
 
         }
     }
+
 }
+fun startIntent(context: Context, intent: Intent) {
+    val chooser: Intent = Intent.createChooser(intent,context.getString(R.string.app_name))
+    if(intent.resolveActivity(context.packageManager) != null){
+        context.startActivity(chooser)
+    }
+    else{
+        Toast.makeText(context, "No se encontró una aplicación para enviar el correo", Toast.LENGTH_SHORT).show()
+    }
+
+}
+
