@@ -1,7 +1,6 @@
 package dev.miguelehr.truequeropa.nav
 
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -84,7 +83,7 @@ sealed class Route(val path: String) {
         }
     }
 
-    // Trueque (ruta genérica si la sigues usando)
+    // Trueque genérico (si lo necesitas en otros flujos)
     data object ProposeTrade : Route("trade/propose/{productId}") {
         fun with(id: String) = "trade/propose/$id"
     }
@@ -92,7 +91,7 @@ sealed class Route(val path: String) {
     // Admin
     data object AdminPanel : Route("admin/panel")
 
-    // Pestaña de cuenta (sólo para abrir el menú)
+    // Pestaña de cuenta (solo para abrir el menú)
     data object Account : Route("home/account")
 }
 
@@ -145,28 +144,43 @@ fun AppNav(navController: NavHostController = rememberNavController()) {
                                     }
                                 },
                                 icon = {
-                                    if (item.route == Route.Proposals.path) {
-                                        BadgedBox(
-                                            badge = {
-                                                if (proposalsBadge > 0) {
-                                                    Badge { Text(proposalsBadge.toString()) }
+                                    when (item.route) {
+                                        Route.Proposals.path -> {
+                                            BadgedBox(
+                                                badge = {
+                                                    if (proposalsBadge > 0) {
+                                                        Badge { Text(proposalsBadge.toString()) }
+                                                    }
                                                 }
+                                            ) {
+                                                Icon(
+                                                    item.icon,
+                                                    contentDescription = item.label
+                                                )
                                             }
-                                        ) {
-                                            Icon(item.icon, contentDescription = item.label)
                                         }
-                                    } else if (item.route == Route.UserRequests.path) {
-                                        BadgedBox(
-                                            badge = {
-                                                if (requestsBadge > 0) {
-                                                    Badge { Text(requestsBadge.toString()) }
+
+                                        Route.UserRequests.path -> {
+                                            BadgedBox(
+                                                badge = {
+                                                    if (requestsBadge > 0) {
+                                                        Badge { Text(requestsBadge.toString()) }
+                                                    }
                                                 }
+                                            ) {
+                                                Icon(
+                                                    item.icon,
+                                                    contentDescription = item.label
+                                                )
                                             }
-                                        ) {
-                                            Icon(item.icon, contentDescription = item.label)
                                         }
-                                    } else {
-                                        Icon(item.icon, contentDescription = item.label)
+
+                                        else -> {
+                                            Icon(
+                                                item.icon,
+                                                contentDescription = item.label
+                                            )
+                                        }
                                     }
                                 },
                                 label = { Text(item.label) }
@@ -174,25 +188,30 @@ fun AppNav(navController: NavHostController = rememberNavController()) {
                         }
                     }
 
-                    // Menú de cuenta (alineado a la derecha)
+                    // Menú de cuenta (lo anclamos más a la derecha con offset)
                     DropdownMenu(
                         expanded = showAccountMenu,
                         onDismissRequest = { showAccountMenu = false },
                         modifier = Modifier.align(Alignment.TopEnd),
-                        offset = DpOffset(0.dp, (-8).dp)
+                        // mueve el menú hacia la derecha respecto al icono
+                        offset = DpOffset(220.dp, (-8).dp)
                     ) {
                         DropdownMenuItem(
                             text = { Text("Mi perfil") },
                             onClick = {
                                 showAccountMenu = false
-                                navController.navigate(Route.Profile.path) { launchSingleTop = true }
+                                navController.navigate(Route.Profile.path) {
+                                    launchSingleTop = true
+                                }
                             }
                         )
                         DropdownMenuItem(
                             text = { Text("Panel de Administrador") },
                             onClick = {
                                 showAccountMenu = false
-                                navController.navigate(Route.AdminPanel.path) { launchSingleTop = true }
+                                navController.navigate(Route.AdminPanel.path) {
+                                    launchSingleTop = true
+                                }
                             }
                         )
                         DropdownMenuItem(
@@ -301,7 +320,6 @@ fun AppNav(navController: NavHostController = rememberNavController()) {
                         padding = padding,
                         onUnreviewedCountChange = { requestsBadge = it },
                         onNavigateToUserPosts = { solicitanteId, postIdSol, _ ->
-                            // Ir al perfil de ese usuario, con su publicación fijada
                             navController.navigate(
                                 Route.ProfileById.with(
                                     userId = solicitanteId,
@@ -355,6 +373,7 @@ fun AppNav(navController: NavHostController = rememberNavController()) {
                 }
             }
 
+            // ===== HISTORIAL =====
             composable(Route.History.path) {
                 val currentUserId = FirebaseAuthManager.currentUserId()
                 if (currentUserId != null) {
