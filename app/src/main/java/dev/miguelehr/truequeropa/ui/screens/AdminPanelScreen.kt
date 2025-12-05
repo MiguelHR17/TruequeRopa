@@ -1,5 +1,10 @@
 package dev.miguelehr.truequeropa.ui.screens
 
+import android.content.Context
+import android.content.Intent
+import android.graphics.Paint
+import android.graphics.pdf.PdfDocument
+import android.os.Environment
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -15,8 +20,10 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.core.content.FileProvider
 import coil.compose.AsyncImage
 import com.google.firebase.Timestamp
 import com.google.firebase.firestore.FirebaseFirestore
@@ -26,6 +33,9 @@ import dev.miguelehr.truequeropa.data.FirestoreManager
 import dev.miguelehr.truequeropa.model.UserPost
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
+import java.io.File
+import java.io.FileOutputStream
+import kotlin.math.min
 
 // =======================
 //  MODELOS INTERNOS ADMIN
@@ -49,6 +59,15 @@ private data class UserReportRow(
     val active: Boolean,
     val postsCount: Int
 )
+
+// Tipos de reporte que puede generar el admin
+private enum class ReportType(val label: String) {
+    ALL_USERS("Lista total de usuarios"),
+    USERS_WITH_POSTS("Usuarios y total de sus publicaciones"),
+    ALL_POSTS("Lista total de publicaciones"),
+    ACTIVE_USERS("Usuarios activos"),
+    INACTIVE_USERS("Usuarios restringidos / inactivos")
+}
 
 // =======================
 //  PANTALLA PRINCIPAL
@@ -180,7 +199,8 @@ private fun AdminUsersTab() {
 
         LazyColumn(
             verticalArrangement = Arrangement.spacedBy(10.dp),
-            modifier = Modifier.fillMaxSize()
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(bottom = 80.dp)
         ) {
             items(users, key = { it.uid }) { u ->
                 UserRow(u)
@@ -387,7 +407,6 @@ private fun UserRow(u: AdminUser) {
                                     .document(u.uid)
                                     .delete()
                                     .await()
-                                // Si quisieras también borrar sus posts, aquí podrías hacerlo.
                             } finally {
                                 isProcessing = false
                                 showDeleteDialog = false
@@ -480,7 +499,8 @@ private fun AdminPostsTab() {
 
         LazyColumn(
             verticalArrangement = Arrangement.spacedBy(10.dp),
-            modifier = Modifier.fillMaxSize()
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(bottom = 80.dp)
         ) {
             items(posts, key = { it.id }) { p ->
                 AdminPostRow(p)
@@ -496,7 +516,7 @@ private fun AdminPostRow(post: UserPost) {
     var processing by remember { mutableStateOf(false) }
 
     val borderColor = if (localHidden)
-        MaterialTheme.colorScheme.error      // 🔴 borde rojo cuando está oculta
+        MaterialTheme.colorScheme.error
     else
         MaterialTheme.colorScheme.outlineVariant ?: MaterialTheme.colorScheme.outline
 
@@ -594,16 +614,18 @@ private fun SmallTag(text: String) {
 }
 
 // =======================
-//  TAB: REPORTES
+//  TAB: REPORTES (PDF con TABLA)
 // =======================
 
 @Composable
 private fun AdminReportsTab() {
+    val context = LocalContext.current
     val scope = rememberCoroutineScope()
+
+    var selectedType by remember { mutableStateOf(ReportType.ALL_USERS) }
     var loading by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
-    var rows by remember { mutableStateOf<List<UserReportRow>>(emptyList()) }
-    var generatedCsv by remember { mutableStateOf<String?>(null) }
+    var successMessage by remember { mutableStateOf<String?>(null) }
 
     Column(Modifier.fillMaxSize()) {
         Text(
@@ -612,14 +634,38 @@ private fun AdminReportsTab() {
             modifier = Modifier.padding(bottom = 8.dp)
         )
 
+        Text("Selecciona el tipo de reporte que quieres generar:")
+
+        Spacer(Modifier.height(8.dp))
+
+        // Opciones de reporte (radio buttons)
+        ReportType.values().forEach { type ->
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.padding(vertical = 2.dp)
+            ) {
+                RadioButton(
+                    selected = selectedType == type,
+                    onClick = { selectedType = type }
+                )
+                Spacer(Modifier.width(4.dp))
+                Text(type.label)
+            }
+        }
+
+        Spacer(Modifier.height(16.dp))
+
         Button(
             onClick = {
                 loading = true
                 error = null
-                generatedCsv = null
+                successMessage = null
+
                 scope.launch {
                     try {
                         val db = FirebaseFirestore.getInstance()
+
+                        // Cargamos usuarios y posts una sola vez
                         val usersSnap = db.collection("users").get().await()
                         val postsSnap = db.collection("posts").get().await()
 
@@ -627,7 +673,7 @@ private fun AdminReportsTab() {
                             it.getString("userId") ?: ""
                         }
 
-                        val list = usersSnap.documents.map { doc ->
+                        val usersList = usersSnap.documents.map { doc ->
                             val uid = doc.getString("uid") ?: doc.id
                             val name = doc.getString("nombre") ?: "(Sin nombre)"
                             val email = doc.getString("email") ?: ""
@@ -645,8 +691,91 @@ private fun AdminReportsTab() {
                             )
                         }
 
-                        rows = list
-                        generatedCsv = buildCsvForUsers(list)
+                        val headers: List<String>
+                        val rows: List<List<String>>
+                        val title: String
+                        val fileName: String
+
+                        when (selectedType) {
+                            ReportType.ALL_USERS -> {
+                                title = "Lista total de usuarios"
+                                fileName = "reporte_usuarios"
+                                headers = listOf("Nombre", "Correo")
+                                rows = usersList.sortedBy { it.nombre }.map { r ->
+                                    listOf(r.nombre, r.email)
+                                }
+                            }
+                            ReportType.USERS_WITH_POSTS -> {
+                                title = "Usuarios y publicaciones"
+                                fileName = "reporte_usuarios_con_posts"
+                                headers = listOf("Nombre", "Correo", "Posts", "Estado")
+                                rows = usersList.sortedBy { it.nombre }.map { r ->
+                                    listOf(
+                                        r.nombre,
+                                        r.email,
+                                        r.postsCount.toString(),
+                                        if (r.active) "Activo" else "Inactivo"
+                                    )
+                                }
+                            }
+                            ReportType.ALL_POSTS -> {
+                                title = "Lista total de publicaciones"
+                                fileName = "reporte_publicaciones"
+                                headers = listOf("Título", "Categoría", "Talla", "Usuario")
+                                rows = postsSnap.documents.map { doc ->
+                                    val titulo = doc.getString("titulo") ?: "(Sin título)"
+                                    val cat = doc.getString("categoria") ?: ""
+                                    val talla = doc.getString("talla") ?: ""
+                                    val userId = doc.getString("userId") ?: ""
+                                    listOf(titulo, cat, talla, userId)
+                                }
+                            }
+                            ReportType.ACTIVE_USERS -> {
+                                title = "Usuarios activos"
+                                fileName = "reporte_usuarios_activos"
+                                headers = listOf("Nombre", "Correo", "Posts")
+                                rows = usersList.filter { it.active }
+                                    .sortedBy { it.nombre }
+                                    .map { r ->
+                                        listOf(
+                                            r.nombre,
+                                            r.email,
+                                            r.postsCount.toString()
+                                        )
+                                    }
+                            }
+                            ReportType.INACTIVE_USERS -> {
+                                title = "Usuarios inactivos / restringidos"
+                                fileName = "reporte_usuarios_inactivos"
+                                headers = listOf("Nombre", "Correo", "Posts")
+                                rows = usersList.filter { !it.active }
+                                    .sortedBy { it.nombre }
+                                    .map { r ->
+                                        listOf(
+                                            r.nombre,
+                                            r.email,
+                                            r.postsCount.toString()
+                                        )
+                                    }
+                            }
+                        }
+
+                        if (rows.isEmpty()) {
+                            throw IllegalStateException("No hay datos para este reporte.")
+                        }
+
+                        val file = createPdfTable(
+                            context = context,
+                            fileName = fileName,
+                            title = title,
+                            headers = headers,
+                            rows = rows
+                        )
+
+                        // 👉 Abrir el PDF en el emulador con un visor de PDF
+                        openPdfInViewer(context, file)
+
+                        successMessage = "PDF generado correctamente en:\n${file.absolutePath}"
                     } catch (e: Exception) {
                         error = e.localizedMessage
                     } finally {
@@ -656,7 +785,7 @@ private fun AdminReportsTab() {
             },
             enabled = !loading
         ) {
-            Text(if (loading) "Generando…" else "Generar reporte de usuarios")
+            Text(if (loading) "Generando PDF…" else "Generar reporte en PDF")
         }
 
         Spacer(Modifier.height(12.dp))
@@ -668,50 +797,130 @@ private fun AdminReportsTab() {
             )
         }
 
-        if (rows.isNotEmpty()) {
+        successMessage?.let { msg ->
+            Spacer(Modifier.height(8.dp))
             Text(
-                "Usuarios encontrados: ${rows.size}",
-                style = MaterialTheme.typography.bodyMedium
+                text = msg,
+                style = MaterialTheme.typography.bodySmall
             )
+        }
+
+        if (!loading && error == null && successMessage == null) {
             Spacer(Modifier.height(8.dp))
-
-            LazyColumn(
-                verticalArrangement = Arrangement.spacedBy(6.dp),
-                modifier = Modifier.weight(1f, fill = true)
-            ) {
-                items(rows, key = { it.uid }) { r ->
-                    Text(
-                        "- ${r.nombre} (${r.email}) · Posts: ${r.postsCount} · " +
-                                (if (r.active) "Activo" else "Inactivo")
-                    )
-                }
-            }
-
-            Spacer(Modifier.height(8.dp))
-
-            if (generatedCsv != null) {
-                Text(
-                    "CSV generado (puedes copiarlo y pegarlo en un .csv y abrirlo en Excel):",
-                    style = MaterialTheme.typography.labelMedium
-                )
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    generatedCsv!!,
-                    style = MaterialTheme.typography.bodySmall
-                )
-            }
-        } else if (!loading) {
-            Text("No hay datos aún. Pulsa el botón para generar el reporte.")
+            Text(
+                "Pulsa el botón para generar el PDF según la opción seleccionada.",
+                style = MaterialTheme.typography.bodySmall
+            )
         }
     }
 }
 
-private fun buildCsvForUsers(list: List<UserReportRow>): String {
-    val header = "uid;nombre;email;createdAt;activo;cantidadPosts"
-    val rows = list.map { r ->
-        val created = r.createdAt?.toDate()?.toString() ?: ""
-        val activeStr = if (r.active) "1" else "0"
-        "${r.uid};\"${r.nombre}\";${r.email};${created};${activeStr};${r.postsCount}"
+// =======================
+//  UTIL: CREAR PDF EN TABLA
+// =======================
+
+private fun createPdfTable(
+    context: Context,
+    fileName: String,
+    title: String,
+    headers: List<String>,
+    rows: List<List<String>>
+): File {
+    val document = PdfDocument()
+
+    val pageWidth = 595  // A4 aproximado (72 dpi)
+    val pageHeight = 842
+    val margin = 40f
+
+    val titlePaint = Paint().apply {
+        textSize = 18f
+        isFakeBoldText = true
     }
-    return (listOf(header) + rows).joinToString("\n")
+    val headerPaint = Paint().apply {
+        textSize = 12f
+        isFakeBoldText = true
+    }
+    val cellPaint = Paint().apply {
+        textSize = 11f
+    }
+
+    val rowHeight = 18f
+    val tableWidth = pageWidth - 2 * margin
+    val colCount = headers.size
+    val colWidth = tableWidth / colCount
+
+    val maxDataRowsPerPage = ((pageHeight - margin * 2 - 50f) / rowHeight).toInt()
+
+    var currentIndex = 0
+    var pageNumber = 1
+
+    while (currentIndex < rows.size) {
+        val pageInfo = PdfDocument.PageInfo.Builder(pageWidth, pageHeight, pageNumber).create()
+        val page = document.startPage(pageInfo)
+        val canvas = page.canvas
+
+        var y = margin
+
+        // Título
+        canvas.drawText(title, margin, y, titlePaint)
+        y += 30f
+
+        // Encabezados
+        var x = margin
+        headers.forEach { header ->
+            // recortamos un poco para evitar super overlaps
+            val text = header.take(20)
+            canvas.drawText(text, x + 4f, y, headerPaint)
+            x += colWidth
+        }
+        y += rowHeight
+
+        // Filas de datos
+        val endIndex = min(currentIndex + maxDataRowsPerPage, rows.size)
+        for (i in currentIndex until endIndex) {
+            val row = rows[i]
+            x = margin
+            for (c in 0 until colCount) {
+                val cellText = row.getOrNull(c)?.take(30) ?: ""
+                canvas.drawText(cellText, x + 4f, y, cellPaint)
+                x += colWidth
+            }
+            y += rowHeight
+        }
+
+        document.finishPage(page)
+        currentIndex = endIndex
+        pageNumber++
+    }
+
+    val dir = context.getExternalFilesDir(Environment.DIRECTORY_DOCUMENTS)
+        ?: context.filesDir
+    if (!dir.exists()) dir.mkdirs()
+
+    val file = File(dir, "$fileName.pdf")
+    FileOutputStream(file).use { out ->
+        document.writeTo(out)
+    }
+    document.close()
+    return file
+}
+
+// =======================
+//  UTIL: ABRIR PDF
+// =======================
+
+private fun openPdfInViewer(context: Context, file: File) {
+    val uri = FileProvider.getUriForFile(
+        context,
+        context.packageName + ".fileprovider",
+        file
+    )
+
+    val intent = Intent(Intent.ACTION_VIEW).apply {
+        setDataAndType(uri, "application/pdf")
+        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    }
+
+    val chooser = Intent.createChooser(intent, "Abrir reporte PDF")
+    context.startActivity(chooser)
 }
