@@ -25,7 +25,8 @@ data class UserProfile(
     val email: String = "",
     val createdAt: Timestamp? = null,
     val active: Boolean = true,          // indica si la cuenta está activa
-    val photoUrl: String? = null         // NUEVO: url de foto de perfil
+    val photoUrl: String? = null,         // NUEVO: url de foto de perfil
+    val restricted: Boolean = false
 )
 
 // ===== PRODUCTO MOCK (para FakeRepository / ofertas locales) =====

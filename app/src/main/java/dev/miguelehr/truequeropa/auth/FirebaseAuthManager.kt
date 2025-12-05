@@ -34,14 +34,18 @@ object FirebaseAuthManager {
         docRef.get()
             .addOnSuccessListener { snapshot ->
                 if (snapshot.exists()) {
+                    // Ya tiene perfil; si quieres, aquí podrías
+                    // comprobar si faltan campos y actualizarlos.
                     onComplete(true)
                 } else {
-                    // Crear perfil mínimo
+                    // Crear perfil mínimo con campos nuevos
                     val data = hashMapOf(
                         "uid" to uid,
                         "email" to (email ?: ""),
                         "nombre" to (nombre ?: ""),
-                        "active" to true,
+                        "active" to true,          // puede acceder a la app
+                        "restricted" to false,     // no restringido por defecto
+                        "isAdmin" to false,        // por defecto no es admin
                         "createdAt" to FieldValue.serverTimestamp()
                     )
 
@@ -56,7 +60,7 @@ object FirebaseAuthManager {
     }
 
     // ✅ Registro con envío de correo de verificación
-    //   → ahora devuelve Success cuando todo sale bien
+    //   → devuelve Success cuando todo sale bien
     fun register(
         email: String,
         password: String,
@@ -99,7 +103,7 @@ object FirebaseAuthManager {
                     return@addOnCompleteListener
                 }
 
-                // 🔹 Crear el perfil básico en Firestore
+                // 🔹 Crear el perfil básico en Firestore (con active/restricted/isAdmin)
                 ensureUserProfile(
                     uid = uid,
                     email = user.email,
@@ -133,6 +137,7 @@ object FirebaseAuthManager {
     }
 
     // ✅ Login: solo permite entrar si el correo está verificado
+    // y si active == true (ocultar cuenta = active = false)
     fun login(
         email: String,
         password: String,
@@ -196,7 +201,8 @@ object FirebaseAuthManager {
                     db.collection("users").document(uid)
                         .get()
                         .addOnSuccessListener { doc ->
-                            val active = doc.getBoolean("active") ?: true // si no hay campo, asumimos activo
+                            val active = doc.getBoolean("active") ?: true
+                            // restricted lo usará la UI, aquí solo bloqueamos si active = false
                             if (!active) {
                                 auth.signOut()
                                 callback(

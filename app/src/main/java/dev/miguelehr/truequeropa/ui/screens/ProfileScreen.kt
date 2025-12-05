@@ -11,13 +11,11 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.ElevatedButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -165,6 +163,9 @@ fun ProfileScreen(
         val fullName = user.nombre.ifBlank { user.email.substringBefore("@") }
         val firstName = fullName.trim().split(" ").firstOrNull().orEmpty()
 
+        // ⚠️ Nuevo: considerar usuario restringido
+        val isRestricted = (!user.active) || user.restricted
+
         // ===== Header =====
         Row(verticalAlignment = Alignment.CenterVertically) {
 
@@ -209,13 +210,23 @@ fun ProfileScreen(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
-                // 👇 Ya no mostramos "Apellido: ..."
                 if (isMe) {
                     Text(
                         text = "Correo: ${user.email}",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+
+                    // 🔴 Texto de usuario restringido (solo en su propio perfil)
+                    if (isRestricted) {
+                        Text(
+                            text = "Usuario restringido",
+                            style = MaterialTheme.typography.bodySmall.copy(
+                                fontWeight = FontWeight.Bold
+                            ),
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    }
                 }
             }
         }
@@ -225,10 +236,21 @@ fun ProfileScreen(
         if (isMe) {
             Button(
                 onClick = onPublish,
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth(),
+                enabled = !isRestricted    // 👈 botón visible pero desactivado si está restringido
             ) {
                 Text("Publicar")
             }
+
+            if (isRestricted) {
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    text = "No puedes publicar mientras tu cuenta esté restringida.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error
+                )
+            }
+
             Spacer(Modifier.height(12.dp))
         }
 

@@ -1,6 +1,7 @@
 package dev.miguelehr.truequeropa.nav
 
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -48,6 +49,10 @@ import dev.miguelehr.truequeropa.ui.screens.PublicationPostsOffersScreen
 import dev.miguelehr.truequeropa.ui.screens.PublicationPostsScreen
 import dev.miguelehr.truequeropa.ui.screens.TradeHistoryScreen
 import dev.miguelehr.truequeropa.ui.screens.UserRequestsScreen
+import com.google.firebase.firestore.FirebaseFirestore
+import kotlinx.coroutines.tasks.await
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.unit.dp
 
 /** Rutas de la app */
 sealed class Route(val path: String) {
@@ -121,6 +126,28 @@ fun AppNav(navController: NavHostController = rememberNavController()) {
     var proposalsBadge by remember { mutableStateOf(0) }
     var requestsBadge by remember { mutableStateOf(0) }
 
+    // 👇 NUEVO: saber si el usuario actual es admin
+    var isAdmin by remember { mutableStateOf(false) }
+    val currentUserId = FirebaseAuthManager.currentUserId()
+
+    LaunchedEffect(currentUserId) {
+        if (currentUserId != null) {
+            try {
+                val snap = FirebaseFirestore.getInstance()
+                    .collection("users")
+                    .document(currentUserId)
+                    .get()
+                    .await()
+
+                isAdmin = snap.getBoolean("isAdmin") == true
+            } catch (e: Exception) {
+                isAdmin = false
+            }
+        } else {
+            isAdmin = false
+        }
+    }
+
     Scaffold(
         bottomBar = {
             // Oculta la barra en pantallas de auth
@@ -187,33 +214,34 @@ fun AppNav(navController: NavHostController = rememberNavController()) {
                             )
                         }
                     }
+                    val menuOffsetX = if (isAdmin) 220.dp else 280.dp
+                    val menuOffsetY = (-8).dp
 
-                    // Menú de cuenta (lo anclamos más a la derecha con offset)
                     DropdownMenu(
                         expanded = showAccountMenu,
                         onDismissRequest = { showAccountMenu = false },
                         modifier = Modifier.align(Alignment.TopEnd),
-                        // mueve el menú hacia la derecha respecto al icono
-                        offset = DpOffset(220.dp, (-8).dp)
+                        offset = DpOffset(menuOffsetX, menuOffsetY)
                     ) {
                         DropdownMenuItem(
                             text = { Text("Mi perfil") },
                             onClick = {
                                 showAccountMenu = false
-                                navController.navigate(Route.Profile.path) {
-                                    launchSingleTop = true
-                                }
+                                navController.navigate(Route.Profile.path) { launchSingleTop = true }
                             }
                         )
-                        DropdownMenuItem(
-                            text = { Text("Panel de Administrador") },
-                            onClick = {
-                                showAccountMenu = false
-                                navController.navigate(Route.AdminPanel.path) {
-                                    launchSingleTop = true
+
+                        // 👇 Solo se muestra si es admin
+                        if (isAdmin) {
+                            DropdownMenuItem(
+                                text = { Text("Panel de Administrador") },
+                                onClick = {
+                                    showAccountMenu = false
+                                    navController.navigate(Route.AdminPanel.path) { launchSingleTop = true }
                                 }
-                            }
-                        )
+                            )
+                        }
+
                         DropdownMenuItem(
                             text = { Text("Cerrar sesión") },
                             onClick = {
@@ -427,7 +455,17 @@ fun AppNav(navController: NavHostController = rememberNavController()) {
 
             // ===== ADMIN =====
             composable(Route.AdminPanel.path) {
-                AdminPanelScreen { navController.popBackStack() }
+                if (isAdmin) {
+                    AdminPanelScreen { navController.popBackStack() }
+                } else {
+                    // Mensaje simple de sin permiso
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text("No tienes permiso para ver esta sección.")
+                    }
+                }
             }
 
             // === PUBLICAR ===
