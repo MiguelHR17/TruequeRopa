@@ -33,8 +33,8 @@ import dev.miguelehr.truequeropa.data.FirestoreManager
 
 @Composable
 fun AuthRegisterScreen(
-    onRegistered: () -> Unit,
-    onBackToLogin: () -> Unit,      // 👈 nuevo callback
+    onRegistered: () -> Unit,   // ahora ya no lo usaremos, pero lo dejamos por compatibilidad
+    onBackToLogin: () -> Unit,
     padding: PaddingValues
 ) {
     val focus = LocalFocusManager.current
@@ -50,10 +50,7 @@ fun AuthRegisterScreen(
     // ---------- Validaciones ----------
     val nombreOk = nombre.length >= 3
     val emailOk = EMAIL_REGEX.matches(email)
-
-    // ✅ Regla: mínimo 8 caracteres, con letras y números
     val passOk = isValidPassword(pass)
-
     val confirmOk = confirm == pass && pass.isNotEmpty()
 
     val formOk = nombreOk && emailOk && passOk && confirmOk && !loading
@@ -175,7 +172,7 @@ fun AuthRegisterScreen(
                             pass = pass,
                             setLoading = { loading = it },
                             setError = { errorMsg = it },
-                            onRegistered = onRegistered
+                            onRegistered = onRegistered // ya no navega
                         )
                     }
                 }
@@ -183,7 +180,7 @@ fun AuthRegisterScreen(
             modifier = Modifier.fillMaxWidth()
         )
 
-        // Error general
+        // Mensaje general (error o info)
         errorMsg?.let {
             Spacer(Modifier.height(8.dp))
             Text(it, color = MaterialTheme.colorScheme.error)
@@ -221,7 +218,7 @@ fun AuthRegisterScreen(
 
         Spacer(Modifier.height(12.dp))
 
-        // 👇 Enlace para volver al login
+        // Enlace para volver al login
         Column(
             modifier = Modifier.fillMaxWidth(),
             horizontalAlignment = Alignment.CenterHorizontally
@@ -250,7 +247,7 @@ private fun doRegister(
     pass: String,
     setLoading: (Boolean) -> Unit,
     setError: (String?) -> Unit,
-    onRegistered: () -> Unit
+    onRegistered: () -> Unit   // ya no lo usamos para navegar, pero lo dejamos
 ) {
     setError(null)
     setLoading(true)
@@ -258,16 +255,36 @@ private fun doRegister(
     FirebaseAuthManager.register(email, pass) { res: FirebaseAuthManager.Result ->
         when (res) {
             is FirebaseAuthManager.Result.Success -> {
+                // ✅ Cuenta creada + correo de verificación enviado
                 val uid = FirebaseAuthManager.currentUserId() ?: ""
-                FirestoreManager.createUserProfile(uid, nombre, email) { ok, err ->
-                    if (ok) {
-                        FirebaseMockLinker.syncCurrentUserIntoMock()
+
+                if (uid.isNotEmpty()) {
+                    // Guardar/actualizar perfil con el nombre correcto
+                    FirestoreManager.createUserProfile(uid, nombre, email) { ok, err ->
                         setLoading(false)
-                        onRegistered()
-                    } else {
-                        setLoading(false)
-                        setError(err ?: "Error guardando perfil")
+
+                        if (!ok) {
+                            setError(err ?: "Error guardando perfil de usuario.")
+                        } else {
+                            FirebaseMockLinker.syncCurrentUserIntoMock()
+                            // Cerramos sesión para que luego solo pueda entrar si verifica el correo
+                            FirebaseAuthManager.signOut()
+                            // Mostrar mensaje en la misma pantalla
+                            setError(
+                                "Te hemos enviado un correo de verificación. " +
+                                        "Revisa tu bandeja y haz clic en el enlace para activar tu cuenta."
+                            )
+                            // 🔹 Ya NO llamamos onRegistered() → no navegamos
+                        }
                     }
+                } else {
+                    // No se pudo obtener el uid, pero igual avisamos del correo
+                    setLoading(false)
+                    FirebaseAuthManager.signOut()
+                    setError(
+                        "Te hemos enviado un correo de verificación. " +
+                                "Revisa tu bandeja y haz clic en el enlace para activar tu cuenta."
+                    )
                 }
             }
 

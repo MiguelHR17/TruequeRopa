@@ -163,9 +163,7 @@ fun ProfileScreen(
         val user = profile!!
 
         val fullName = user.nombre.ifBlank { user.email.substringBefore("@") }
-        val nameParts = fullName.trim().split(" ", limit = 2)
-        val firstName = nameParts.getOrNull(0) ?: ""
-        val lastName = nameParts.getOrNull(1).orEmpty()
+        val firstName = fullName.trim().split(" ").firstOrNull().orEmpty()
 
         // ===== Header =====
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -211,13 +209,7 @@ fun ProfileScreen(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
-                if (isMe && lastName.isNotBlank()) {
-                    Text(
-                        text = "Apellido: $lastName",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
+                // 👇 Ya no mostramos "Apellido: ..."
                 if (isMe) {
                     Text(
                         text = "Correo: ${user.email}",

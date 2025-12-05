@@ -343,7 +343,7 @@ private fun UserRow(u: AdminUser) {
     // Diálogo editar nombre
     if (showEditDialog) {
         AlertDialog(
-            onDismissRequest = { showEditDialog = false },
+            onDismissRequest = { if (!isProcessing) showEditDialog = false },
             title = { Text("Modificar datos del usuario") },
             text = {
                 Column {
@@ -353,7 +353,13 @@ private fun UserRow(u: AdminUser) {
                         value = editedName,
                         onValueChange = { editedName = it },
                         singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth(),
+                        supportingText = {
+                            Text(
+                                text = "Máx. 40 caracteres, sin saltos de línea",
+                                style = MaterialTheme.typography.labelSmall
+                            )
+                        }
                     )
                 }
             },
@@ -361,13 +367,22 @@ private fun UserRow(u: AdminUser) {
                 TextButton(
                     enabled = !isProcessing,
                     onClick = {
+                        val safeName = sanitizeUserName(editedName)
+
+                        // Si después de sanear queda vacío, no guardamos y cerramos
+                        if (safeName.isBlank()) {
+                            editedName = u.nombre
+                            showEditDialog = false
+                            return@TextButton
+                        }
+
                         isProcessing = true
                         scope.launch {
                             try {
                                 FirebaseFirestore.getInstance()
                                     .collection("users")
                                     .document(u.uid)
-                                    .update("nombre", editedName)
+                                    .update("nombre", safeName)
                                     .await()
                             } finally {
                                 isProcessing = false
@@ -380,7 +395,10 @@ private fun UserRow(u: AdminUser) {
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showEditDialog = false }) {
+                TextButton(
+                    enabled = !isProcessing,
+                    onClick = { showEditDialog = false }
+                ) {
                     Text("Cancelar")
                 }
             }
@@ -772,7 +790,7 @@ private fun AdminReportsTab() {
                             rows = rows
                         )
 
-                        // 👉 Abrir el PDF en el emulador con un visor de PDF
+                        // Abrir el PDF en el emulador
                         openPdfInViewer(context, file)
 
                         successMessage = "PDF generado correctamente en:\n${file.absolutePath}"
@@ -868,7 +886,6 @@ private fun createPdfTable(
         // Encabezados
         var x = margin
         headers.forEach { header ->
-            // recortamos un poco para evitar super overlaps
             val text = header.take(20)
             canvas.drawText(text, x + 4f, y, headerPaint)
             x += colWidth
@@ -923,4 +940,23 @@ private fun openPdfInViewer(context: Context, file: File) {
 
     val chooser = Intent.createChooser(intent, "Abrir reporte PDF")
     context.startActivity(chooser)
+}
+
+// =======================
+//  UTIL: SANEAR NOMBRE
+// =======================
+
+private fun sanitizeUserName(raw: String): String {
+    // Quita saltos de línea, recorta espacios y limita longitud
+    val noNewLines = raw
+        .replace("\n", " ")
+        .replace("\r", " ")
+        .trim()
+
+    val maxLen = 40
+    return if (noNewLines.length <= maxLen) {
+        noNewLines
+    } else {
+        noNewLines.substring(0, maxLen)
+    }
 }
