@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -49,12 +50,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.rememberAsyncImagePainter
 import dev.miguelehr.truequeropa.model.UserRequestDetails
 import dev.miguelehr.truequeropa.ui.viewmodels.UserRequestsViewModel
 import kotlinx.coroutines.launch
+import androidx.compose.ui.unit.sp
 
 @Composable
 fun UserRequestsScreen(
@@ -108,7 +112,7 @@ fun UserRequestsScreen(
         Text(
             "Propuesta de Intercambio",
             style = MaterialTheme.typography.headlineSmall,
-            fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+            fontWeight = FontWeight.Bold,
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
         )
 
@@ -293,7 +297,7 @@ fun UserRequestItem(
             ) {
                 Text(
                     "${details.solicitanteProfile.nombre} quiere intercambiar contigo",
-                    fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
+                    fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.weight(1f)
                 )
 
@@ -326,7 +330,7 @@ fun UserRequestItem(
 
                     Text(
                         "Tu prenda:",
-                        fontWeight = androidx.compose.ui.text.font.FontWeight.Medium
+                        fontWeight = FontWeight.Medium
                     )
                     Spacer(Modifier.height(4.dp))
 
@@ -355,12 +359,22 @@ fun UserRequestItem(
                     ) {
                         Text(
                             text = "Prenda de ${details.solicitanteProfile.nombre}:",
-                            fontWeight = androidx.compose.ui.text.font.FontWeight.Medium
+                            fontWeight = FontWeight.Medium
                         )
 
                         if (details.request.estado == "0") {
-                            FilledTonalButton(onClick = onNavigateToUserPosts) {
-                                Text("Publicaciones")
+                            FilledTonalButton(
+                                onClick = onNavigateToUserPosts,
+                                modifier = Modifier
+                                    .widthIn(min = 120.dp)
+                                    .height(40.dp)
+                            ) {
+                                Text(
+                                    "Perfil",
+                                    maxLines = 1,
+                                    softWrap = false,
+                                    fontSize = 12.sp
+                                )
                             }
                         }
                     }
@@ -408,7 +422,7 @@ fun UserRequestItem(
                             "2" -> "❌ Propuesta rechazada"
                             else -> "⚠ Propuesta pendiente"
                         },
-                        fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold
+                        fontWeight = FontWeight.SemiBold
                     )
                 }
             }

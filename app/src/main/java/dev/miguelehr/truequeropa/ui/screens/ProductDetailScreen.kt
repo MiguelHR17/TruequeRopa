@@ -95,20 +95,11 @@ fun ProductDetailScreen(
                 if (result != null) {
                     post = result.first
                     owner = result.second
-                    Log.d(
-                        "ProductDetailScreen",
-                        "Post cargado: ${result.first.titulo}"
-                    )
-                    Log.d(
-                        "ProductDetailScreen",
-                        "Imágenes: ${result.first.imageUrls.size}"
-                    )
+                    Log.d("ProductDetailScreen", "Post cargado: ${result.first.titulo}")
+                    Log.d("ProductDetailScreen", "Imágenes: ${result.first.imageUrls.size}")
                 } else {
                     error = "No se encontró el producto"
-                    Log.e(
-                        "ProductDetailScreen",
-                        "Result es null para postId: $postId"
-                    )
+                    Log.e("ProductDetailScreen", "Result es null para postId: $postId")
                 }
             } catch (e: Exception) {
                 error = e.localizedMessage ?: "Error desconocido"
@@ -170,7 +161,8 @@ fun ProductDetailScreen(
                         .fillMaxSize()
                         .padding(padding)
                         .verticalScroll(rememberScrollState())
-                        .padding(16.dp)
+                        // 🔽 margen extra abajo para que el botón no quede tapado
+                        .padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 96.dp)
                 ) {
                     // Galería de imágenes
                     if (p.imageUrls.isNotEmpty()) {
@@ -180,8 +172,7 @@ fun ProductDetailScreen(
                         ) {
                             items(p.imageUrls) { url ->
                                 Card(
-                                    modifier = Modifier
-                                        .size(200.dp),
+                                    modifier = Modifier.size(200.dp),
                                     colors = CardDefaults.cardColors(
                                         containerColor = MaterialTheme.colorScheme.surfaceVariant
                                     )
@@ -240,9 +231,7 @@ fun ProductDetailScreen(
                     Spacer(Modifier.height(8.dp))
 
                     // Chips de info básica
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         if (p.categoria.isNotBlank()) {
                             FilterChip(
                                 selected = false,
@@ -347,7 +336,7 @@ fun ProductDetailScreen(
 
                     Spacer(Modifier.height(24.dp))
 
-                    // Botón de proponer trueque
+                    // Botón de proponer trueque (dentro del scroll)
                     Button(
                         onClick = {
                             if (canProposeTrade) {
