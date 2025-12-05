@@ -194,7 +194,7 @@ fun PostItem(
         {
             Image(
                // painter = rememberAsyncImagePainter(generateImageUrl(postDetails.solicitantePost.categoria,1)),
-                painter = rememberAsyncImagePainter(postDetails.solicitantePost.imageUrls),
+                painter = rememberAsyncImagePainter(postDetails.solicitantePost.imageUrls.first()),
                 contentDescription = postDetails.solicitantePost.descripcion,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier

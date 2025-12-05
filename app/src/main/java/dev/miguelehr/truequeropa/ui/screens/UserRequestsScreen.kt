@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -26,7 +27,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.outlined.Email
+import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ElevatedCard
@@ -214,18 +217,60 @@ fun UserRequestItem(
                     .padding(top = 8.dp)) {
                     Text("Tu prenda:", fontWeight = FontWeight.Medium)
                     Spacer(Modifier.height(4.dp))
-                    Image(
-                       // painter = rememberAsyncImagePainter(generateImageUrl(details.propietarioPost.categoria,2)),
-                        painter = rememberAsyncImagePainter(details.propietarioPost.imageUrls ),
-                        contentDescription = details.propietarioPost.descripcion,
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(140.dp)
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(Color.LightGray, RoundedCornerShape(12.dp))
-                    )
-                    Text(details.propietarioPost.titulo)
+
+                    if (details.propietarioPost.imageUrls.isNotEmpty()) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(), // La Row ocupa todo el ancho
+                            verticalAlignment = Alignment.CenterVertically, // Alinea la imagen y el texto verticalmente
+                            horizontalArrangement = Arrangement.spacedBy(12.dp) // Añade un espacio entre ellos
+                        ) {
+                            Image(
+                                //painter = rememberAsyncImagePainter(generateImageUrl(details.propietarioPost.categoria,1)),
+                                painter = rememberAsyncImagePainter(details.propietarioPost.imageUrls.first()),
+                                contentDescription = details.propietarioPost.descripcion,
+                                contentScale = ContentScale.Fit,
+                                modifier = Modifier
+                                    .weight(1.2f)
+                                    .height(290.dp)
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(Color.LightGray, RoundedCornerShape(12.dp))
+                            )
+
+                            Column(Modifier.weight(1f)) {
+                                Text(
+                                    details.propietarioPost.titulo,
+                                    style = MaterialTheme.typography.titleMedium
+                                )
+                                Text(
+                                    "${details.propietarioPost.categoria} • Talla ${details.propietarioPost.talla}",
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                                Text(
+                                    details.propietarioPost.descripcion,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 2
+                                )
+                                Spacer(Modifier.height(4.dp))
+                                AssistChip(
+                                    onClick = {},
+                                    label = { Text(details.propietarioPost.estado) }
+                                )
+                            }
+                        }
+                    } else {
+                        // Placeholder si no hay imagen
+                        Box(
+                            modifier = Modifier.size(72.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Search,
+                                contentDescription = null,
+                                modifier = Modifier.size(32.dp)
+                            )
+                        }
+                    }
 
                     Spacer(Modifier.height(12.dp))
 
@@ -248,18 +293,60 @@ fun UserRequestItem(
                     }
 
                     Spacer(Modifier.height(4.dp))
-                    Image(
-                        //painter = rememberAsyncImagePainter(generateImageUrl(details.solicitantePost.categoria,1)),
-                        painter = rememberAsyncImagePainter(details.solicitantePost.imageUrls ),
-                        contentDescription = details.solicitantePost.descripcion,
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(140.dp)
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(Color.LightGray, RoundedCornerShape(12.dp))
-                    )
-                    Text(details.solicitantePost.titulo)
+
+                    if (details.solicitantePost.imageUrls.isNotEmpty()) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(), // La Row ocupa todo el ancho
+                            verticalAlignment = Alignment.CenterVertically, // Alinea la imagen y el texto verticalmente
+                            horizontalArrangement = Arrangement.spacedBy(12.dp) // Añade un espacio entre ellos
+                        ) {
+                            Image(
+                                //painter = rememberAsyncImagePainter(generateImageUrl(details.solicitantePost.categoria,1)),
+                                painter = rememberAsyncImagePainter(details.solicitantePost.imageUrls.first()),
+                                contentDescription = details.solicitantePost.descripcion,
+                                contentScale = ContentScale.Fit,
+                                modifier = Modifier
+                                    .weight(1.2f)
+                                    .height(290.dp)
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(Color.LightGray, RoundedCornerShape(12.dp))
+                            )
+
+                            Column(Modifier.weight(1f)) {
+                                Text(
+                                    details.solicitantePost.titulo,
+                                    style = MaterialTheme.typography.titleMedium
+                                )
+                                Text(
+                                    "${details.solicitantePost.categoria} • Talla ${details.solicitantePost.talla}",
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                                Text(
+                                    details.solicitantePost.descripcion,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 2
+                                )
+                                Spacer(Modifier.height(4.dp))
+                                AssistChip(
+                                    onClick = {},
+                                    label = { Text(details.solicitantePost.estado) }
+                                )
+                            }
+                        }
+                    } else {
+                        // Placeholder si no hay imagen
+                        Box(
+                            modifier = Modifier.size(72.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Search,
+                                contentDescription = null,
+                                modifier = Modifier.size(32.dp)
+                            )
+                        }
+                    }
 
                     Spacer(Modifier.height(16.dp))
 

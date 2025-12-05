@@ -21,7 +21,8 @@ class UserRequestsViewModel : ViewModel() {
     private val _userPosts = MutableStateFlow<List<UserPostsDetails>>(emptyList())
     val userRequests: StateFlow<List<UserRequestDetails>> = _userRequests
     val userPosts: StateFlow<List<UserPostsDetails>> = _userPosts
-
+    private val _isLoading = MutableStateFlow(false)
+    val isLoading: StateFlow<Boolean> = _isLoading
     suspend fun createRequest(
         postIdPropietario: String,
         postIdSolicitante: String,
@@ -62,8 +63,13 @@ class UserRequestsViewModel : ViewModel() {
 
     fun fetchUserPosts(userId: String) {
         viewModelScope.launch {
-            val posts = FirestoreManager.getAllUserPostDetailsForUser(userId)
-            _userPosts.value = posts
+            _isLoading.value = true // 1. Ponemos el estado de carga en true
+            try {
+                val posts = FirestoreManager.getAllUserPostDetailsForUser(userId)
+                _userPosts.value = posts
+            } finally {
+                _isLoading.value = false // 2. Cuando termina (con éxito o error), lo ponemos en false
+            }
         }
     }
 

@@ -344,7 +344,8 @@ fun AppNav(navController: NavHostController = rememberNavController()) {
 
                 if (currentUserId != null) {
                     PublicationPostsOffersScreen(
-                        userId = userId,
+                        //userId = userId,
+                        userId = currentUserId,
                         postIdProp = postIdProp,
                         onNavigateToOffers = {
                             navController.navigate(Route.Offers.path)

@@ -27,6 +27,7 @@ import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -68,6 +69,8 @@ fun PublicationPostsOffersScreen(
     var showDialogForPost by remember { mutableStateOf<String?>(null) }
     var userPropietario by remember { mutableStateOf<UserProfile?>(null) }
     val scope = rememberCoroutineScope()
+
+    val isLoading by vm.isLoading.collectAsState()
 
     LaunchedEffect(userId) {
         userPropietario = vm.selUser(userId)
@@ -129,43 +132,86 @@ fun PublicationPostsOffersScreen(
     LaunchedEffect(userId) {
         vm.fetchUserPosts(userId)
     }
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(horizontal = 16.dp)
-    ) {
-        Spacer(Modifier.height(24.dp))
-        Text(
-            text = "Prendas de ${userPropietario?.nombre?.uppercase()}:",
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Medium
-        )
-        Spacer(Modifier.height(16.dp))
-        LazyColumn(
-            modifier = Modifier.weight(1f, fill = false),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
 
-            items(userPosts) { postDetails ->
+    when {
+        isLoading -> {
+            // Estado 1: CARGANDO
+            Column(
+                modifier = Modifier.fillMaxSize(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                CircularProgressIndicator() // O cualquier animación de carga
+                Spacer(Modifier.height(16.dp))
+                Text("Cargando prendas...")
+            }
+        }
 
-                PostItemOffer(
-                    postDetails = postDetails,
-                    isSelected = postDetails.solicitantePost.id == selectedPostId,
-                    onItemClick = {
-
-                        selectedPostId = if (selectedPostId == postDetails.solicitantePost.id) {
-                            null
-                        } else {
-                            postDetails.solicitantePost.id
-                        }
-                        showDialogForPost = postDetails.solicitantePost.id
-                        //onNavigateToRequestDetails(userId )
-                    }
+        userPosts.isEmpty() -> {
+            // Caso 1: La lista está vacía, mostramos un mensaje.
+            Column(
+                modifier = Modifier
+                    .fillMaxSize() // Ocupa todo el espacio disponible
+                    .padding(16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                Text(
+                    "¡Sin prendas!",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    "${userPropietario?.nombre ?: "Este usuario"} no tiene prendas disponibles para intercambiar en este momento.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
-            item { Spacer(Modifier.height(8.dp)) }
         }
-        Spacer(Modifier.height(16.dp))
+
+        else -> {
+
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 16.dp)
+            ) {
+                Spacer(Modifier.height(24.dp))
+                Text(
+                    text = "Prendas de ${userPropietario?.nombre?.uppercase()}:",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Medium
+                )
+                Spacer(Modifier.height(16.dp))
+                LazyColumn(
+                    modifier = Modifier.weight(1f, fill = false),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+
+                    items(userPosts) { postDetails ->
+
+                        PostItemOffer(
+                            postDetails = postDetails,
+                            isSelected = postDetails.solicitantePost.id == selectedPostId,
+                            onItemClick = {
+
+                                selectedPostId =
+                                    if (selectedPostId == postDetails.solicitantePost.id) {
+                                        null
+                                    } else {
+                                        postDetails.solicitantePost.id
+                                    }
+                                showDialogForPost = postDetails.solicitantePost.id
+                                //onNavigateToRequestDetails(userId )
+                            }
+                        )
+                    }
+                    item { Spacer(Modifier.height(8.dp)) }
+                }
+                Spacer(Modifier.height(16.dp))
+            }
+        }
     }
 }
 
@@ -207,7 +253,7 @@ fun PostItemOffer(
         {
             Image(
                // painter = rememberAsyncImagePainter(generateImageUrl(postDetails.solicitantePost.categoria,1)),
-                painter = rememberAsyncImagePainter(postDetails.solicitantePost.imageUrls),
+                painter = rememberAsyncImagePainter(postDetails.solicitantePost.imageUrls.firstOrNull()),
                 contentDescription = postDetails.solicitantePost.descripcion,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier
