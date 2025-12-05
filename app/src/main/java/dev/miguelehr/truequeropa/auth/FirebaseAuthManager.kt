@@ -34,7 +34,6 @@ object FirebaseAuthManager {
         docRef.get()
             .addOnSuccessListener { snapshot ->
                 if (snapshot.exists()) {
-                    // Ya tiene perfil, no hacemos nada raro
                     onComplete(true)
                 } else {
                     // Crear perfil mínimo
@@ -57,6 +56,7 @@ object FirebaseAuthManager {
     }
 
     // ✅ Registro con envío de correo de verificación
+    //   → ahora devuelve Success cuando todo sale bien
     fun register(
         email: String,
         password: String,
@@ -105,16 +105,21 @@ object FirebaseAuthManager {
                     email = user.email,
                     nombre = user.displayName
                 ) { ok ->
-                    // Aunque falle el perfil, igual intentamos enviar el correo de verificación
+                    if (!ok) {
+                        callback(
+                            Result.Error(
+                                "La cuenta se creó, pero no se pudo guardar el perfil en la base de datos."
+                            )
+                        )
+                        return@ensureUserProfile
+                    }
+
+                    // Intentar enviar correo de verificación
                     user.sendEmailVerification()
                         .addOnCompleteListener { verTask ->
                             if (verTask.isSuccessful) {
-                                // Todo OK, pero el usuario aún debe verificar el correo
-                                callback(
-                                    Result.Error(
-                                        "Te hemos enviado un correo de verificación. Revisa tu bandeja y haz clic en el enlace para activar tu cuenta."
-                                    )
-                                )
+                                // ✅ Todo OK: cuenta creada + correo de verificación enviado
+                                callback(Result.Success)
                             } else {
                                 callback(
                                     Result.Error(

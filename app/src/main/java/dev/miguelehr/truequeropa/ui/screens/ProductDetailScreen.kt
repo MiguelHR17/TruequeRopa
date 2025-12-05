@@ -308,16 +308,7 @@ fun ProductDetailScreen(
                                 style = MaterialTheme.typography.titleMedium,
                                 color = MaterialTheme.colorScheme.onSecondaryContainer
                             )
-                            Spacer(Modifier.height(2.dp))
-                            Text(
-                                text = o.email,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme
-                                    .onSecondaryContainer
-                                    .copy(alpha = 0.7f)
-                            )
-
-                            Spacer(Modifier.height(8.dp))
+                            Spacer(Modifier.height(6.dp))
 
                             // Botón para ver perfil
                             TextButton(
