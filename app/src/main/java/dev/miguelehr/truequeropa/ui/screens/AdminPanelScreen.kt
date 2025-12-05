@@ -48,7 +48,8 @@ private data class AdminUser(
     val nombre: String,
     val email: String,
     val photoUrl: String? = null,
-    val active: Boolean = true
+    val active: Boolean = true,
+    val restricted: Boolean = false   // 👈 nuevo campo
 )
 
 private data class UserReportRow(
@@ -57,6 +58,7 @@ private data class UserReportRow(
     val email: String,
     val createdAt: Timestamp?,
     val active: Boolean,
+    val restricted: Boolean,          // 👈 nuevo campo
     val postsCount: Int
 )
 
@@ -66,7 +68,7 @@ private enum class ReportType(val label: String) {
     USERS_WITH_POSTS("Usuarios y total de sus publicaciones"),
     ALL_POSTS("Lista total de publicaciones"),
     ACTIVE_USERS("Usuarios activos"),
-    INACTIVE_USERS("Usuarios restringidos / inactivos")
+    INACTIVE_USERS("Usuarios ocultos / restringidos")
 }
 
 // =======================
@@ -159,7 +161,8 @@ private fun AdminUsersTab() {
                         nombre = doc.getString("nombre") ?: "(Sin nombre)",
                         email = doc.getString("email") ?: "",
                         photoUrl = doc.getString("photoUrl"),
-                        active = doc.getBoolean("active") ?: true
+                        active = doc.getBoolean("active") ?: true,
+                        restricted = doc.getBoolean("restricted") ?: false
                     )
                 }
                 loading = false
@@ -213,16 +216,22 @@ private fun AdminUsersTab() {
 private fun UserRow(u: AdminUser) {
     val scope = rememberCoroutineScope()
     var menuOpen by remember { mutableStateOf(false) }
-    var showDeleteDialog by remember { mutableStateOf(false) }
+
+    var showHideDialog by remember { mutableStateOf(false) }    // 👈 para “Ocultar cuenta”
     var showEditDialog by remember { mutableStateOf(false) }
     var editedName by remember { mutableStateOf(u.nombre) }
+
     var isProcessing by remember { mutableStateOf(false) }
     var localActive by remember { mutableStateOf(u.active) }
+    var localRestricted by remember { mutableStateOf(u.restricted) }
 
-    val cardBorderColor = if (!localActive)
-        MaterialTheme.colorScheme.error
-    else
-        MaterialTheme.colorScheme.outlineVariant ?: MaterialTheme.colorScheme.outline
+    val cardBorderColor =
+        if (!localActive) {
+            // Cuenta oculta -> borde rojo
+            MaterialTheme.colorScheme.error
+        } else {
+            MaterialTheme.colorScheme.outlineVariant ?: MaterialTheme.colorScheme.outline
+        }
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -271,11 +280,19 @@ private fun UserRow(u: AdminUser) {
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+
+                // Mensajes de estado
                 if (!localActive) {
                     Text(
-                        "Cuenta desactivada",
+                        "Cuenta oculta",
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.error
+                    )
+                } else if (localRestricted) {
+                    Text(
+                        "Cuenta restringida",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.tertiary
                     )
                 }
             }
@@ -291,27 +308,29 @@ private fun UserRow(u: AdminUser) {
                     expanded = menuOpen,
                     onDismissRequest = { menuOpen = false }
                 ) {
-                    // Activar / desactivar
-                    val textEstado = if (localActive) "Desactivar cuenta" else "Activar cuenta"
+                    // 🔹 OPCIÓN 1: Restringir / quitar restricción
+                    val textRestrict =
+                        if (localRestricted) "Quitar restricción" else "Restringir cuenta"
+
                     DropdownMenuItem(
-                        text = { Text(textEstado) },
+                        text = { Text(textRestrict) },
                         onClick = {
                             menuOpen = false
                             isProcessing = true
                             scope.launch {
-                                val ok = FirestoreManager.setUserActive(
+                                val ok = FirestoreManager.setUserRestricted(
                                     u.uid,
-                                    !localActive
+                                    !localRestricted
                                 )
                                 if (ok) {
-                                    localActive = !localActive
+                                    localRestricted = !localRestricted
                                 }
                                 isProcessing = false
                             }
                         }
                     )
 
-                    // Modificar nombre
+                    // 🔹 OPCIÓN 2: Modificar nombre
                     DropdownMenuItem(
                         text = { Text("Modificar nombre") },
                         onClick = {
@@ -323,16 +342,34 @@ private fun UserRow(u: AdminUser) {
 
                     Divider()
 
+                    // 🔹 OPCIÓN 3: Ocultar / mostrar cuenta
+                    val textHide = if (localActive) "Ocultar cuenta" else "Mostrar cuenta"
                     DropdownMenuItem(
                         text = {
                             Text(
-                                "Eliminar usuario",
-                                color = MaterialTheme.colorScheme.error
+                                textHide,
+                                color = if (localActive)
+                                    MaterialTheme.colorScheme.error
+                                else
+                                    MaterialTheme.colorScheme.primary
                             )
                         },
                         onClick = {
                             menuOpen = false
-                            showDeleteDialog = true
+                            if (localActive) {
+                                // Ocultar cuenta -> pedimos confirmación
+                                showHideDialog = true
+                            } else {
+                                // Volver a mostrarla sin diálogo
+                                isProcessing = true
+                                scope.launch {
+                                    val ok = FirestoreManager.setUserActive(u.uid, true)
+                                    if (ok) {
+                                        localActive = true
+                                    }
+                                    isProcessing = false
+                                }
+                            }
                         }
                     )
                 }
@@ -340,7 +377,7 @@ private fun UserRow(u: AdminUser) {
         }
     }
 
-    // Diálogo editar nombre
+    // ===== Diálogo editar nombre =====
     if (showEditDialog) {
         AlertDialog(
             onDismissRequest = { if (!isProcessing) showEditDialog = false },
@@ -369,7 +406,7 @@ private fun UserRow(u: AdminUser) {
                     onClick = {
                         val safeName = sanitizeUserName(editedName)
 
-                        // Si después de sanear queda vacío, no guardamos y cerramos
+                        // Si después de sanear queda vacío, no guardamos
                         if (safeName.isBlank()) {
                             editedName = u.nombre
                             showEditDialog = false
@@ -405,13 +442,16 @@ private fun UserRow(u: AdminUser) {
         )
     }
 
-    // Diálogo eliminar usuario
-    if (showDeleteDialog) {
+    // ===== Diálogo ocultar cuenta =====
+    if (showHideDialog) {
         AlertDialog(
-            onDismissRequest = { showDeleteDialog = false },
-            title = { Text("Eliminar usuario") },
+            onDismissRequest = { if (!isProcessing) showHideDialog = false },
+            title = { Text("Ocultar cuenta") },
             text = {
-                Text("¿Seguro que deseas eliminar a \"${u.nombre}\"? Esto no se puede deshacer.")
+                Text(
+                    "¿Seguro que deseas ocultar la cuenta de \"${u.nombre}\"?\n\n" +
+                            "El usuario no podrá iniciar sesión en la app."
+                )
             },
             confirmButton = {
                 TextButton(
@@ -420,23 +460,25 @@ private fun UserRow(u: AdminUser) {
                         isProcessing = true
                         scope.launch {
                             try {
-                                FirebaseFirestore.getInstance()
-                                    .collection("users")
-                                    .document(u.uid)
-                                    .delete()
-                                    .await()
+                                val ok = FirestoreManager.setUserActive(u.uid, false)
+                                if (ok) {
+                                    localActive = false
+                                }
                             } finally {
                                 isProcessing = false
-                                showDeleteDialog = false
+                                showHideDialog = false
                             }
                         }
                     }
                 ) {
-                    Text("Eliminar", color = MaterialTheme.colorScheme.error)
+                    Text("Ocultar", color = MaterialTheme.colorScheme.error)
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showDeleteDialog = false }) {
+                TextButton(
+                    enabled = !isProcessing,
+                    onClick = { showHideDialog = false }
+                ) {
                     Text("Cancelar")
                 }
             }
@@ -697,6 +739,7 @@ private fun AdminReportsTab() {
                             val email = doc.getString("email") ?: ""
                             val createdAt = doc.getTimestamp("createdAt")
                             val active = doc.getBoolean("active") ?: true
+                            val restricted = doc.getBoolean("restricted") ?: false
                             val countPosts = postsByUser[uid]?.size ?: 0
 
                             UserReportRow(
@@ -705,6 +748,7 @@ private fun AdminReportsTab() {
                                 email = email,
                                 createdAt = createdAt,
                                 active = active,
+                                restricted = restricted,
                                 postsCount = countPosts
                             )
                         }
@@ -728,11 +772,16 @@ private fun AdminReportsTab() {
                                 fileName = "reporte_usuarios_con_posts"
                                 headers = listOf("Nombre", "Correo", "Posts", "Estado")
                                 rows = usersList.sortedBy { it.nombre }.map { r ->
+                                    val estado = when {
+                                        !r.active -> "Oculto"
+                                        r.restricted -> "Restringido"
+                                        else -> "Activo"
+                                    }
                                     listOf(
                                         r.nombre,
                                         r.email,
                                         r.postsCount.toString(),
-                                        if (r.active) "Activo" else "Inactivo"
+                                        estado
                                     )
                                 }
                             }
@@ -752,7 +801,8 @@ private fun AdminReportsTab() {
                                 title = "Usuarios activos"
                                 fileName = "reporte_usuarios_activos"
                                 headers = listOf("Nombre", "Correo", "Posts")
-                                rows = usersList.filter { it.active }
+                                rows = usersList
+                                    .filter { it.active && !it.restricted }
                                     .sortedBy { it.nombre }
                                     .map { r ->
                                         listOf(
@@ -763,16 +813,23 @@ private fun AdminReportsTab() {
                                     }
                             }
                             ReportType.INACTIVE_USERS -> {
-                                title = "Usuarios inactivos / restringidos"
+                                title = "Usuarios ocultos / restringidos"
                                 fileName = "reporte_usuarios_inactivos"
-                                headers = listOf("Nombre", "Correo", "Posts")
-                                rows = usersList.filter { !it.active }
+                                headers = listOf("Nombre", "Correo", "Posts", "Estado")
+                                rows = usersList
+                                    .filter { !it.active || it.restricted }
                                     .sortedBy { it.nombre }
                                     .map { r ->
+                                        val estado = when {
+                                            !r.active -> "Oculto"
+                                            r.restricted -> "Restringido"
+                                            else -> "Activo"
+                                        }
                                         listOf(
                                             r.nombre,
                                             r.email,
-                                            r.postsCount.toString()
+                                            r.postsCount.toString(),
+                                            estado
                                         )
                                     }
                             }

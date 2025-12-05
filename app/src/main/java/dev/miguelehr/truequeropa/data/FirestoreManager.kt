@@ -14,11 +14,12 @@ import dev.miguelehr.truequeropa.model.UserProfile
 import dev.miguelehr.truequeropa.model.UserRequestDetails
 import kotlinx.coroutines.tasks.await
 
-//FirestoreManager
 object FirestoreManager {
+
     private val db: FirebaseFirestore by lazy { FirebaseFirestore.getInstance() }
 
-    // users/{uid}
+    // ---------- PERFIL DE USUARIO ----------
+
     fun createUserProfile(
         uid: String,
         nombre: String,
@@ -30,7 +31,8 @@ object FirestoreManager {
             "nombre" to nombre,
             "email" to email,
             "createdAt" to FieldValue.serverTimestamp(),
-            "active" to true                // ✅ usuario activo por defecto
+            "active" to true,
+            "restricted" to false
         )
         db.collection("users").document(uid)
             .set(data)
@@ -38,7 +40,94 @@ object FirestoreManager {
             .addOnFailureListener { onComplete(false, it.localizedMessage) }
     }
 
-    // ---------- CREAR PUBLICACIÓN DE USUARIO ----------
+    fun ensureUserProfile(
+        uid: String,
+        email: String?,
+        nombre: String? = null,
+        onComplete: (Boolean) -> Unit
+    ) {
+        val docRef = db.collection("users").document(uid)
+        docRef.get()
+            .addOnSuccessListener { snapshot ->
+                if (snapshot.exists()) {
+                    onComplete(true)
+                } else {
+                    val data = hashMapOf(
+                        "uid" to uid,
+                        "email" to (email ?: ""),
+                        "nombre" to (nombre ?: ""),
+                        "active" to true,
+                        "restricted" to false,
+                        "createdAt" to FieldValue.serverTimestamp()
+                    )
+                    docRef.set(data)
+                        .addOnSuccessListener { onComplete(true) }
+                        .addOnFailureListener { onComplete(false) }
+                }
+            }
+            .addOnFailureListener {
+                onComplete(false)
+            }
+    }
+
+    suspend fun getUser(uid: String): UserProfile? {
+        val doc = db.collection("users").document(uid).get().await()
+        return doc.toObject(UserProfile::class.java)
+    }
+
+    suspend fun updateUserPhoto(uid: String, photoUrl: String): Boolean {
+        return try {
+            db.collection("users")
+                .document(uid)
+                .update("photoUrl", photoUrl)
+                .await()
+            true
+        } catch (e: Exception) {
+            Log.e("FirestoreManager", "Error al actualizar foto de usuario", e)
+            false
+        }
+    }
+
+    // Cambiar solo el estado active (ocultar / permitir login)
+    suspend fun setUserActive(uid: String, active: Boolean): Boolean {
+        return try {
+            db.collection("users")
+                .document(uid)
+                .update("active", active)
+                .await()
+
+            // Si lo desactivo, oculto todos sus posts; si lo activo, los vuelvo a mostrar
+            val postsSnap = db.collection("posts")
+                .whereEqualTo("userId", uid)
+                .get()
+                .await()
+
+            for (doc in postsSnap.documents) {
+                doc.reference.update("hidden", !active).await()
+            }
+            true
+        } catch (e: Exception) {
+            Log.e("FirestoreManager", "Error al cambiar estado de usuario", e)
+            false
+        }
+    }
+
+    // Cambiar flag restricted (para bloquear publicar/proponer trueques)
+    suspend fun setUserRestricted(uid: String, restricted: Boolean): Boolean {
+        return try {
+            db.collection("users")
+                .document(uid)
+                .update("restricted", restricted)
+                .await()
+            true
+        } catch (e: Exception) {
+            Log.e("FirestoreManager", "Error al cambiar restricted de usuario", e)
+            false
+        }
+    }
+
+    // ---------- POSTS (PUBLICACIONES) ----------
+
     fun createUserPost(
         uid: String,
         prendaId: String,
@@ -52,6 +141,7 @@ object FirestoreManager {
         onComplete: (Boolean, String?) -> Unit
     ) {
         val data = hashMapOf(
+            "id" to prendaId,                 // opcional, útil tenerlo también en el doc
             "userId" to uid,
             "prendaId" to prendaId,
             "titulo" to titulo,
@@ -61,23 +151,23 @@ object FirestoreManager {
             "estado" to estado,
             "imageUrls" to imageUrls,
             "estadoTrueque" to estadoTrueque,
-            "hidden" to false,                    // ✅ visible por defecto
+            "hidden" to false,
             "createdAt" to FieldValue.serverTimestamp()
         )
+
         db.collection("posts")
-            .add(data)
+            .document(prendaId)              // 👈 AQUÍ ESTÁ EL CAMBIO CLAVE
+            .set(data)
             .addOnSuccessListener { onComplete(true, null) }
             .addOnFailureListener { e -> onComplete(false, e.localizedMessage) }
     }
 
-    // ---------- ESCUCHAR PUBLICACIONES DE UN USUARIO ----------
     fun listenPostsForUser(
         uid: String,
         onChange: (List<UserPost>, String?) -> Unit
     ): ListenerRegistration {
         return db.collection("posts")
             .whereEqualTo("userId", uid)
-            .whereEqualTo("hidden", false)  // ✅ sólo posts visibles
             .orderBy("createdAt", Query.Direction.DESCENDING)
             .addSnapshotListener { snap, e ->
                 if (e != null) {
@@ -116,73 +206,14 @@ object FirestoreManager {
             .addOnFailureListener { e -> onComplete(false, e.localizedMessage) }
     }
 
-    fun createUserRequest(
-        postIdPropietario : String,
-        postIdSolicitante : String,
-        estado : String,
-        onComplete: (Boolean) -> Unit
-    ): Boolean {
-        return try {
-            val data = hashMapOf(
-                "postIdPropietario" to postIdPropietario,
-                "postIdSolicitante" to postIdSolicitante,
-                "estado" to estado,
-                "createdAt" to FieldValue.serverTimestamp()
-            )
-
-            db.collection("request")
-                .add(data)
-                .addOnSuccessListener { onComplete(true ) }
-                .addOnFailureListener { _ -> onComplete(false) }
-            true
-        } catch (e: Exception) {
-            false
-        }
-    }
-
-    suspend fun UpdateEstadoUserRequest(
-        requestId : String,
-        estado : String
-    ) {
-        val requestDoc = db.collection("request").document(requestId)
-
-        // Prepara los datos a actualizar
-        val updates = mapOf(
-            "estado" to estado,      // 1 para Aprobado
-            "fechaAprobacion" to FieldValue.serverTimestamp() // Opcional: guarda la fecha de aprobación
-        )
-
-        requestDoc.update(updates).await()
-    }
-
-    suspend fun UpdatePostSolicitante(
-        requestId : String,
-        postId: String
-    ): Boolean {
-        return try {
-            val requestDoc = db.collection("request").document(requestId)
-            val updates = mapOf(
-                "postIdSolicitante" to postId,
-                "createdAt" to FieldValue.serverTimestamp()
-            )
-            requestDoc.update(updates).await()
-            true
-        } catch (e: Exception) {
-            false
-        }
-    }
-
     suspend fun UpdatePost(
         postId: String,
         postValue: String
     ): Boolean {
         return try {
-            val postDoc = db.collection("posts").document(postId)
-
-            val updates = mapOf(
-                "estadoTrueque" to postValue,
-            )
-            postDoc.update(updates).await()
+            db.collection("posts").document(postId)
+                .update("estadoTrueque", postValue)
+                .await()
             true
         } catch (e: Exception) {
             Log.e("update", "Error al actualizar el estado del post", e)
@@ -190,7 +221,6 @@ object FirestoreManager {
         }
     }
 
-    // ✅ NUEVO: actualizar sólo la descripción del post
     suspend fun updatePostDescription(
         postId: String,
         newDescription: String
@@ -203,184 +233,6 @@ object FirestoreManager {
             true
         } catch (e: Exception) {
             Log.e("FirestoreManager", "Error al actualizar descripción de post", e)
-            false
-        }
-    }
-
-    suspend fun getUser(uid: String): UserProfile? {
-        val propietarioProfileDoc = db.collection("users").document(uid).get().await()
-        val propietarioProfile = propietarioProfileDoc.toObject(UserProfile::class.java) ?: return null
-        return propietarioProfile
-    }
-
-    // ➕ actualizar campo photoUrl del usuario
-    suspend fun updateUserPhoto(uid: String, photoUrl: String): Boolean {
-        return try {
-            db.collection("users")
-                .document(uid)
-                .update("photoUrl", photoUrl)
-                .await()
-            true
-        } catch (e: Exception) {
-            Log.e("FirestoreManager", "Error al actualizar foto de usuario", e)
-            false
-        }
-    }
-
-    suspend fun getUserRequestDetails(requestId: String): UserRequestDetails? {
-        val requestDoc = db.collection("request").document(requestId).get().await()
-        val request = requestDoc.toObject(UserRequest::class.java) ?: return null
-
-        val requestWithId = request.copy(id = requestDoc.id)
-
-        val propietarioPostDoc = db.collection("posts").document(request.postIdPropietario).get().await()
-        val propietarioPost = propietarioPostDoc.toObject(UserPost::class.java) ?: return null
-        val propietarioPostWithId = propietarioPost.copy(id = propietarioPostDoc.id)
-
-        val solicitantePostDoc = db.collection("posts").document(request.postIdSolicitante).get().await()
-        val solicitantePost = solicitantePostDoc.toObject(UserPost::class.java) ?: return null
-        val solicitantePostWithId = solicitantePost.copy(id = solicitantePostDoc.id)
-
-        val solicitanteProfileDoc = db.collection("users").document(solicitantePost.userId).get().await()
-        val solicitanteProfile = solicitanteProfileDoc.toObject(UserProfile::class.java) ?: return null
-
-        val propietarioProfileDoc = db.collection("users").document(propietarioPost.userId).get().await()
-        val propietarioProfile = propietarioProfileDoc.toObject(UserProfile::class.java) ?: return null
-
-        return UserRequestDetails(
-            requestWithId,
-            propietarioProfile,
-            solicitanteProfile,
-            propietarioPostWithId,
-            solicitantePostWithId
-        )
-    }
-
-    suspend fun getAllUserRequestDetailsForUser(userId: String,report: Int): List<UserRequestDetails> {
-
-        val requests = mutableListOf<UserRequestDetails>()
-        val processedRequestIds = mutableSetOf<String>() // Para evitar duplicados
-
-        try {
-            // Primero, obtenemos todos los posts del usuario.
-            val userPostsSnapshot = db.collection("posts")
-                .whereEqualTo("userId", userId)
-                .get()
-                .await()
-
-            val userPostIds = userPostsSnapshot.documents.map { it.id }
-
-            if (userPostIds.isEmpty()) {
-                return emptyList()
-            }
-
-            // --- Consulta 1: Solicitudes donde el usuario es el PROPIETARIO de la prenda ---
-            val requestsAsOwnerSnapshot = db.collection("request")
-                .whereIn("postIdPropietario", userPostIds)
-                .get()
-                .await()
-
-            for (document in requestsAsOwnerSnapshot.documents) {
-                if (processedRequestIds.add(document.id)) { // Añade si no existe
-                    val details = getUserRequestDetails(document.id)
-                    if (details != null) {
-                        requests.add(details)
-                    }
-                }
-            }
-
-            // --- Consulta 2: Solicitudes donde el usuario es el SOLICITANTE de la prenda ---
-            if(report == 1) {
-                val requestsAsRequesterSnapshot = db.collection("request")
-                    .whereIn("postIdSolicitante", userPostIds)
-                    .get()
-                    .await()
-
-                for (document in requestsAsRequesterSnapshot.documents) {
-                    if (processedRequestIds.add(document.id)) { // Añade si no existe
-                        val details = getUserRequestDetails(document.id)
-                        if (details != null) {
-                            requests.add(details)
-                        }
-                    }
-                }
-            }
-
-        } catch (e: Exception) {
-            //Log.e(TAG, "Error al obtener las solicitudes de usuario", e)
-        }
-
-        return requests.sortedByDescending { it.request.createdAt } // Opcional: ordenar por fecha
-    }
-
-    suspend fun getUserPostDetails(PostsId: String): UserPostsDetails? {
-
-        val solicitantePostDoc = db.collection("posts").document(PostsId).get().await()
-        val solicitantePost = solicitantePostDoc.toObject(UserPost::class.java) ?: return null
-
-        val postsWithId = solicitantePost.copy(id = solicitantePostDoc.id)
-
-        return UserPostsDetails(
-            postsWithId
-        )
-    }
-
-    suspend fun getAllUserPostDetailsForUser(userId: String): List<UserPostsDetails> {
-
-        val posts = mutableListOf<UserPostsDetails>()
-        val processedPostsIds = mutableSetOf<String>() // Para evitar duplicados
-
-        try {
-            // Primero, obtenemos todos los posts del usuario.
-            val userPostsSnapshot = db.collection("posts")
-                .whereEqualTo("userId", userId)
-                .whereEqualTo("estadoTrueque", "0")
-                .get()
-                .await()
-
-            val userPostIds = userPostsSnapshot.documents.map { it.id }
-
-            if (userPostIds.isEmpty()) {
-                return emptyList()
-            }
-
-            for (document in userPostsSnapshot.documents) {
-                if (processedPostsIds.add(document.id)) { // Añade si no existe
-                    val details = getUserPostDetails(document.id)
-                    if (details != null) {
-                        posts.add(details)
-                    }
-                }
-            }
-
-        } catch (e: Exception) {
-            // Log.e(TAG, "Error al obtener las solicitudes de usuario", e)
-        }
-
-        return posts.sortedByDescending { it.solicitantePost.createdAt }
-    }
-
-    suspend fun setUserActive(uid: String, active: Boolean): Boolean {
-        return try {
-            // 1) Actualizar el estado del usuario
-            db.collection("users")
-                .document(uid)
-                .update("active", active)
-                .await()
-
-            // 2) Si se desactiva, ocultar todos sus posts.
-            //    Si se activa, volver a mostrarlos.
-            val postsSnap = db.collection("posts")
-                .whereEqualTo("userId", uid)
-                .get()
-                .await()
-
-            for (doc in postsSnap.documents) {
-                doc.reference.update("hidden", !active).await()
-            }
-            true
-        } catch (e: Exception) {
-            Log.e("FirestoreManager", "Error al cambiar estado de usuario", e)
             false
         }
     }
@@ -398,114 +250,211 @@ object FirestoreManager {
         }
     }
 
-    fun ensureUserProfile(
-        uid: String,
-        email: String?,
-        nombre: String? = null,
-        onComplete: (Boolean) -> Unit
-    ) {
-        val docRef = db.collection("users").document(uid)
-
-        docRef.get()
-            .addOnSuccessListener { snapshot ->
-                if (snapshot.exists()) {
-                    // Ya tiene perfil
-                    onComplete(true)
-                } else {
-                    // Crear perfil mínimo
-                    val data = hashMapOf(
-                        "uid" to uid,
-                        "email" to (email ?: ""),
-                        "nombre" to (nombre ?: ""),
-                        "active" to true,
-                        "createdAt" to FieldValue.serverTimestamp()
-                    )
-
-                    docRef.set(data)
-                        .addOnSuccessListener { onComplete(true) }
-                        .addOnFailureListener { onComplete(false) }
-                }
-            }
-            .addOnFailureListener {
-                onComplete(false)
-            }
-    }
-
     suspend fun getAllAvailablePosts(): List<UserPostsDetails> {
         val posts = mutableListOf<UserPostsDetails>()
-
         try {
-            Log.d("FirestoreManager", "Iniciando consulta de posts disponibles...")
-
-            val allPostsSnapshot = db.collection("posts")
+            val snap = db.collection("posts")
                 .whereEqualTo("estadoTrueque", "0")
-                .whereEqualTo("hidden", false)  // ✅ Solo posts visibles
+                .whereEqualTo("hidden", false)
                 .get()
                 .await()
 
-            Log.d("FirestoreManager", "Documentos encontrados: ${allPostsSnapshot.size()}")
-
-            for (document in allPostsSnapshot.documents) {
-                val post = document.toObject(UserPost::class.java)?.copy(id = document.id)
-
+            for (doc in snap.documents) {
+                val post = doc.toObject(UserPost::class.java)?.copy(id = doc.id)
                 if (post != null) {
-                    Log.d("FirestoreManager", "Post agregado - ID: ${post.id}, Titulo: ${post.titulo}")
                     posts.add(UserPostsDetails(post))
-                } else {
-                    Log.e("FirestoreManager", "No se pudo parsear documento: ${document.id}")
                 }
             }
-
-            // Ordenar manualmente por fecha
             posts.sortByDescending { it.solicitantePost.createdAt }
-
-            Log.d("FirestoreManager", "Total posts procesados: ${posts.size}")
         } catch (e: Exception) {
             Log.e("FirestoreManager", "Error al obtener todos los posts", e)
         }
-
         return posts
     }
 
     suspend fun getPostWithUserDetails(postId: String): Pair<UserPost, UserProfile>? {
         return try {
-            Log.d("FirestoreManager", "Buscando post con ID: $postId")
-
             val postDoc = db.collection("posts").document(postId).get().await()
-
-            if (!postDoc.exists()) {
-                Log.e("FirestoreManager", "Post no existe: $postId")
-                return null
-            }
-
-            Log.d("FirestoreManager", "Post encontrado: ${postDoc.data}")
-
+            if (!postDoc.exists()) return null
             val post = postDoc.toObject(UserPost::class.java)?.copy(id = postDoc.id)
+                ?: return null
 
-            if (post == null) {
-                Log.e("FirestoreManager", "No se pudo parsear el post")
-                return null
-            }
-
-            Log.d("FirestoreManager", "Buscando usuario: ${post.userId}")
             var userProfile = getUser(post.userId)
-
-            // Si no existe el usuario, crear uno temporal
             if (userProfile == null) {
-                Log.w("FirestoreManager", "Usuario no encontrado, creando perfil temporal")
                 userProfile = UserProfile(
                     uid = post.userId,
                     nombre = "Usuario desconocido",
                     email = "Sin email"
                 )
             }
-
-            Log.d("FirestoreManager", "Usuario obtenido: ${userProfile.nombre}")
-
             Pair(post, userProfile)
         } catch (e: Exception) {
             Log.e("FirestoreManager", "Error al obtener post con detalles", e)
             null
         }
+    }
+
+    // ---------- REQUESTS (TRUEQUES) ----------
+
+    fun createUserRequest(
+        postIdPropietario: String,
+        postIdSolicitante: String,
+        estado: String,
+        onComplete: (Boolean) -> Unit
+    ): Boolean {
+        return try {
+            val data = hashMapOf(
+                "postIdPropietario" to postIdPropietario,
+                "postIdSolicitante" to postIdSolicitante,
+                "estado" to estado,
+                "createdAt" to FieldValue.serverTimestamp()
+            )
+            db.collection("request")
+                .add(data)
+                .addOnSuccessListener { onComplete(true) }
+                .addOnFailureListener { onComplete(false) }
+            true
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    suspend fun UpdateEstadoUserRequest(
+        requestId: String,
+        estado: String
+    ) {
+        val requestDoc = db.collection("request").document(requestId)
+        val updates = mapOf(
+            "estado" to estado,
+            "fechaAprobacion" to FieldValue.serverTimestamp()
+        )
+        requestDoc.update(updates).await()
+    }
+
+    suspend fun UpdatePostSolicitante(
+        requestId: String,
+        postId: String
+    ): Boolean {
+        return try {
+            val requestDoc = db.collection("request").document(requestId)
+            val updates = mapOf(
+                "postIdSolicitante" to postId,
+                "createdAt" to FieldValue.serverTimestamp()
+            )
+            requestDoc.update(updates).await()
+            true
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    suspend fun getUserRequestDetails(requestId: String): UserRequestDetails? {
+        val requestDoc = db.collection("request").document(requestId).get().await()
+        val request = requestDoc.toObject(UserRequest::class.java) ?: return null
+        val requestWithId = request.copy(id = requestDoc.id)
+
+        val propietarioPostDoc =
+            db.collection("posts").document(request.postIdPropietario).get().await()
+        val propietarioPost =
+            propietarioPostDoc.toObject(UserPost::class.java)?.copy(id = propietarioPostDoc.id)
+                ?: return null
+
+        val solicitantePostDoc =
+            db.collection("posts").document(request.postIdSolicitante).get().await()
+        val solicitantePost =
+            solicitantePostDoc.toObject(UserPost::class.java)?.copy(id = solicitantePostDoc.id)
+                ?: return null
+
+        val solicitanteProfileDoc =
+            db.collection("users").document(solicitantePost.userId).get().await()
+        val solicitanteProfile =
+            solicitanteProfileDoc.toObject(UserProfile::class.java) ?: return null
+
+        val propietarioProfileDoc =
+            db.collection("users").document(propietarioPost.userId).get().await()
+        val propietarioProfile =
+            propietarioProfileDoc.toObject(UserProfile::class.java) ?: return null
+
+        return UserRequestDetails(
+            requestWithId,
+            propietarioProfile,
+            solicitanteProfile,
+            propietarioPost,
+            solicitantePost
+        )
+    }
+
+    suspend fun getAllUserRequestDetailsForUser(userId: String, report: Int): List<UserRequestDetails> {
+        val requests = mutableListOf<UserRequestDetails>()
+        val processedIds = mutableSetOf<String>()
+
+        try {
+            val userPostsSnapshot = db.collection("posts")
+                .whereEqualTo("userId", userId)
+                .get()
+                .await()
+
+            val userPostIds = userPostsSnapshot.documents.map { it.id }
+            if (userPostIds.isEmpty()) return emptyList()
+
+            val asOwnerSnap = db.collection("request")
+                .whereIn("postIdPropietario", userPostIds)
+                .get()
+                .await()
+
+            for (doc in asOwnerSnap.documents) {
+                if (processedIds.add(doc.id)) {
+                    val details = getUserRequestDetails(doc.id)
+                    if (details != null) requests.add(details)
+                }
+            }
+
+            if (report == 1) {
+                val asRequesterSnap = db.collection("request")
+                    .whereIn("postIdSolicitante", userPostIds)
+                    .get()
+                    .await()
+
+                for (doc in asRequesterSnap.documents) {
+                    if (processedIds.add(doc.id)) {
+                        val details = getUserRequestDetails(doc.id)
+                        if (details != null) requests.add(details)
+                    }
+                }
+            }
+        } catch (_: Exception) { }
+
+        return requests.sortedByDescending { it.request.createdAt }
+    }
+
+    // ---------- POSTS PARA ELEGIR EN TRUEQUE ----------
+
+    suspend fun getUserPostDetails(postId: String): UserPostsDetails? {
+        val doc = db.collection("posts").document(postId).get().await()
+        val post = doc.toObject(UserPost::class.java) ?: return null
+        return UserPostsDetails(post.copy(id = doc.id))
+    }
+
+    suspend fun getAllUserPostDetailsForUser(userId: String): List<UserPostsDetails> {
+        val posts = mutableListOf<UserPostsDetails>()
+        val processedIds = mutableSetOf<String>()
+
+        try {
+            val snap = db.collection("posts")
+                .whereEqualTo("userId", userId)
+                .whereEqualTo("estadoTrueque", "0")
+                .whereEqualTo("hidden", false)
+                .get()
+                .await()
+
+            for (doc in snap.documents) {
+                if (processedIds.add(doc.id)) {
+                    val details = getUserPostDetails(doc.id)
+                    if (details != null) posts.add(details)
+                }
+            }
+        } catch (_: Exception) { }
+
+        return posts.sortedByDescending { it.solicitantePost.createdAt }
     }
 }

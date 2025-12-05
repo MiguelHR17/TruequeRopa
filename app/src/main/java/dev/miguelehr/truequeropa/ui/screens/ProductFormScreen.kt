@@ -38,28 +38,29 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import coil.compose.rememberAsyncImagePainter
+import dev.miguelehr.truequeropa.auth.FirebaseAuthManager
+import dev.miguelehr.truequeropa.data.FirestoreManager
+import dev.miguelehr.truequeropa.data.FirebaseStorageManager
 import dev.miguelehr.truequeropa.model.Category
 import dev.miguelehr.truequeropa.model.Condition
 import dev.miguelehr.truequeropa.model.Size
-import dev.miguelehr.truequeropa.auth.FirebaseAuthManager
-import dev.miguelehr.truequeropa.data.FirestoreManager
-import java.util.UUID
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.launch
-import dev.miguelehr.truequeropa.data.FirebaseStorageManager
+import java.util.UUID
 
 @Composable
 fun ProductFormScreen(
@@ -77,11 +78,36 @@ fun ProductFormScreen(
     var saving by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
 
-    val canSave = titulo.isNotBlank()
-            && descripcion.isNotBlank()
-            && selectedCategory != null
-            && selectedSize != null
-            && selectedImages.isNotEmpty() // ← Agregado: debe tener al menos 1 imagen
+    // ---- Estado de restricción del usuario ----
+    val currentUid = FirebaseAuthManager.currentUserId()
+    var isRestricted by remember { mutableStateOf(false) }
+    var loadingRestriction by remember { mutableStateOf(true) }
+    var restrictionError by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(currentUid) {
+        if (currentUid == null) {
+            isRestricted = false
+            loadingRestriction = false
+            restrictionError = "Debes iniciar sesión."
+            return@LaunchedEffect
+        }
+        try {
+            val user = FirestoreManager.getUser(currentUid)
+            isRestricted = user?.restricted == true
+        } catch (e: Exception) {
+            restrictionError = e.localizedMessage
+        } finally {
+            loadingRestriction = false
+        }
+    }
+
+    val canSave = !isRestricted &&
+            !loadingRestriction &&
+            titulo.isNotBlank() &&
+            descripcion.isNotBlank() &&
+            selectedCategory != null &&
+            selectedSize != null &&
+            selectedImages.isNotEmpty()   // mínimo 1 imagen
 
     // Launcher para seleccionar imágenes
     val imagePickerLauncher = rememberLauncherForActivityResult(
@@ -104,6 +130,24 @@ fun ProductFormScreen(
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 16.dp, vertical = 12.dp)
     ) {
+        // Mensaje sobre el estado de restricción
+        if (isRestricted) {
+            Text(
+                text = "Tu cuenta está restringida. Puedes navegar por la app, " +
+                        "pero no puedes publicar nuevas prendas ni proponer trueques.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+                modifier = Modifier.padding(bottom = 12.dp)
+            )
+        } else if (restrictionError != null) {
+            Text(
+                text = restrictionError ?: "",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+                modifier = Modifier.padding(bottom = 12.dp)
+            )
+        }
+
         // Título principal
         Text(
             text = "REGISTRO DE PRODUCTOS",
@@ -315,6 +359,12 @@ fun ProductFormScreen(
         // Botón para publicar en el perfil
         Button(
             onClick = {
+                // Bloqueo duro por si acaso
+                if (isRestricted) {
+                    error = "Tu cuenta está restringida. No puedes publicar prendas."
+                    return@Button
+                }
+
                 val uid = FirebaseAuthManager.currentUserId()
                 if (uid == null) {
                     error = "Debes iniciar sesión para publicar."

@@ -82,6 +82,11 @@ fun ProductDetailScreen(
     var showRepublishDialog by remember { mutableStateOf(false) }
     var republishing by remember { mutableStateOf(false) }
 
+    // ---- Estado de restricción del usuario actual ----
+    var isRestricted by remember { mutableStateOf(false) }
+    var loadingRestriction by remember { mutableStateOf(true) }
+    var restrictionError by remember { mutableStateOf<String?>(null) }
+
     // Cargar post + info de usuario de Firestore
     LaunchedEffect(postId) {
         scope.launch {
@@ -109,6 +114,24 @@ fun ProductDetailScreen(
             }
         }
     }
+
+    LaunchedEffect(currentUserId) {
+        if (currentUserId == null) {
+            isRestricted = false
+            loadingRestriction = false
+            return@LaunchedEffect
+        }
+        try {
+            val me = FirestoreManager.getUser(currentUserId)
+            isRestricted = me?.restricted == true
+        } catch (e: Exception) {
+            restrictionError = e.localizedMessage
+        } finally {
+            loadingRestriction = false
+        }
+    }
+
+
 
     Scaffold(
         topBar = {
@@ -154,7 +177,12 @@ fun ProductDetailScreen(
 
                 val isMyPost = currentUserId != null && p.userId == currentUserId
                 val isUsedInTrade = p.estadoTrueque != "0"
-                val canProposeTrade = !isMyPost && !isUsedInTrade
+                val canProposeTrade =
+                    currentUserId != null &&
+                            !isMyPost &&
+                            !isUsedInTrade &&
+                            !isRestricted &&
+                            !loadingRestriction
 
                 Column(
                     modifier = Modifier
@@ -468,6 +496,21 @@ fun ProductDetailScreen(
                         Text("Cancelar")
                     }
                 }
+            )
+        }
+        if (isRestricted) {
+            Text(
+                text = "Tu cuenta está restringida. No puedes proponer trueques.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+                modifier = Modifier.padding(bottom = 8.dp)
+            )
+        } else if (restrictionError != null) {
+            Text(
+                text = restrictionError ?: "",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+                modifier = Modifier.padding(bottom = 8.dp)
             )
         }
     }
