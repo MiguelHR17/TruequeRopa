@@ -2,6 +2,7 @@ package dev.miguelehr.truequeropa.model
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import dev.miguelehr.truequeropa.auth.FirebaseAuthManager
 import dev.miguelehr.truequeropa.data.FirestoreManager
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -25,8 +26,6 @@ class OffersViewModel : ViewModel() {
             _offersState.value = _offersState.value.copy(isLoading = true, error = null)
 
             try {
-                // Aquí cargamos TODOS los posts disponibles (no solo de un usuario)
-                // Necesitamos modificar FirestoreManager para esto
                 val posts = FirestoreManager.getAllAvailablePosts()
 
                 _offersState.value = OffersState(
@@ -51,18 +50,17 @@ class OffersViewModel : ViewModel() {
         val filtered = _offersState.value.allPosts.filter { postDetail ->
             val post = postDetail.solicitantePost
 
-            // Filtro de texto (busca en título y descripción)
-            val matchesQuery = if (query.isBlank()) true else {
+            val matchesQuery = if (query.isBlank()) {
+                true
+            } else {
                 post.titulo.contains(query, ignoreCase = true) ||
                         post.descripcion.contains(query, ignoreCase = true)
             }
 
-            // Filtro de categoría
             val matchesCategoria = categoria?.let {
                 post.categoria.equals(it, ignoreCase = true)
             } ?: true
 
-            // Filtro de talla
             val matchesTalla = talla?.let {
                 post.talla.equals(it, ignoreCase = true)
             } ?: true
