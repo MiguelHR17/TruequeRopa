@@ -254,8 +254,8 @@ object FirestoreManager {
         val posts = mutableListOf<UserPostsDetails>()
         try {
             val snap = db.collection("posts")
-                .whereEqualTo("estadoTrueque", "0")
-                .whereEqualTo("hidden", false)
+                .whereEqualTo("estadoTrueque", "0")   // sólo disponibles
+                .whereEqualTo("hidden", false)        // no ocultas por admin
                 .get()
                 .await()
 
@@ -265,6 +265,8 @@ object FirestoreManager {
                     posts.add(UserPostsDetails(post))
                 }
             }
+
+            // Ordenar por fecha de creación descendente
             posts.sortByDescending { it.solicitantePost.createdAt }
         } catch (e: Exception) {
             Log.e("FirestoreManager", "Error al obtener todos los posts", e)

@@ -67,11 +67,38 @@ class UserRequestsViewModel : ViewModel() {
         }
     }
 
-    fun acceptRequest(requestId: String,userId: String) {
+    fun acceptRequest(requestId: String, userId: String) {
         viewModelScope.launch(Dispatchers.IO) {
-            val requestUpd = FirestoreManager.UpdateEstadoUserRequest(requestId,"1")
-            val requests = FirestoreManager.getAllUserRequestDetailsForUser(userId,0)
-            _userRequests.value = requests
+            try {
+                // 1) Cambiar el estado de la solicitud a "1" (aprobada)
+                FirestoreManager.UpdateEstadoUserRequest(requestId, "1")
+
+                // 2) Obtener detalles completos de la solicitud: incluye ambos posts
+                val details = FirestoreManager.getUserRequestDetails(requestId)
+
+                if (details != null) {
+                    val propietarioPostId  = details.request.postIdPropietario
+                    val solicitantePostId  = details.request.postIdSolicitante
+
+                    // LOG de seguridad (para comprobar IDs en Logcat si hace falta)
+                    // Log.d("UserRequestsViewModel", "Aprobando request $requestId")
+                    // Log.d("UserRequestsViewModel", "propietarioPostId = $propietarioPostId")
+                    // Log.d("UserRequestsViewModel", "solicitantePostId = $solicitantePostId")
+
+                    // 3) Marcar AMBAS prendas como usadas en trueque (estadoTrueque = "1")
+                    FirestoreManager.UpdatePost(propietarioPostId, "1")
+                    FirestoreManager.UpdatePost(solicitantePostId, "1")
+                } else {
+                    Log.e("UserRequestsViewModel", "Detalles de request nulos para id=$requestId")
+                }
+
+                // 4) Refrescar la lista de solicitudes para el usuario actual
+                val requests = FirestoreManager.getAllUserRequestDetailsForUser(userId, 0)
+                _userRequests.value = requests
+
+            } catch (e: Exception) {
+                Log.e("UserRequestsViewModel", "Error al aceptar la solicitud", e)
+            }
         }
     }
 
