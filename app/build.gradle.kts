@@ -1,9 +1,20 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
     id("com.google.gms.google-services")
 }
+
+// 🔹 Leer GEMINI_API_KEY desde local.properties
+val localProps = Properties().apply {
+    val file = rootProject.file("local.properties")
+    if (file.exists()) {
+        load(file.inputStream())
+    }
+}
+val geminiApiKey: String = localProps.getProperty("GEMINI_API_KEY") ?: ""
 
 android {
     namespace = "dev.miguelehr.truequeropa"
@@ -17,6 +28,13 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        // 🔹 Esto crea BuildConfig.GEMINI_API_KEY
+        buildConfigField(
+            "String",
+            "GEMINI_API_KEY",
+            "\"$geminiApiKey\""
+        )
     }
 
     buildTypes {
@@ -37,6 +55,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true   // 👈 ESTA LÍNEA ES LA CLAVE
     }
 }
 
@@ -80,5 +99,8 @@ dependencies {
 
     // Coroutines - Actualizar versión:
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.10.2")  // era 1.8.1
+
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    // 👇 NUEVO: para parsear el JSON de la respuesta de Gemini
+    implementation("org.json:json:20240303")
 }
-    apply(plugin = "com.google.gms.google-services")

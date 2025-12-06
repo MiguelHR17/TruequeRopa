@@ -53,6 +53,7 @@ import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.tasks.await
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.unit.dp
+import dev.miguelehr.truequeropa.ui.screens.GeminiScreen
 
 /** Rutas de la app */
 sealed class Route(val path: String) {
@@ -228,6 +229,17 @@ fun AppNav(navController: NavHostController = rememberNavController()) {
                             onClick = {
                                 showAccountMenu = false
                                 navController.navigate(Route.Profile.path) { launchSingleTop = true }
+                            }
+                        )
+
+                        // 🔹 NUEVO: opción IA Gemini
+                        DropdownMenuItem(
+                            text = { Text("IA Gemini") },
+                            onClick = {
+                                showAccountMenu = false
+                                navController.navigate("gemini") {
+                                    launchSingleTop = true
+                                }
                             }
                         )
 
@@ -475,6 +487,12 @@ fun AppNav(navController: NavHostController = rememberNavController()) {
                         navController.popBackStack()
                     },
                     padding = padding
+                )
+            }
+
+            composable("gemini") {
+                GeminiScreen(
+                    onBack = { navController.popBackStack() }
                 )
             }
         }
